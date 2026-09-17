@@ -19,8 +19,10 @@ export const ProfileScreen: React.FC = () => {
   const bookings = useBookingStore(state => state.bookings);
   const resetToMockData = useBookingStore(state => state.resetToMockData);
 
-  const completedCount = bookings.filter(b => b.status === 'CHECKED_IN').length;
-  const upcomingCount = bookings.filter(b => b.status === 'CONFIRMED').length;
+  const completedCount = bookings.filter(
+    b => b.status === 'checked-in' || b.status === 'completed'
+  ).length;
+  const upcomingCount = bookings.filter(b => b.status === 'upcoming').length;
 
   const handleTestNotification = async () => {
     try {
@@ -88,18 +90,15 @@ export const ProfileScreen: React.FC = () => {
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {currentUser.fullName
+              {currentUser.name
                 .split(' ')
                 .map(n => n[0])
                 .join('')
                 .slice(-2)}
             </Text>
           </View>
-          <Text style={styles.userName}>{currentUser.fullName}</Text>
+          <Text style={styles.userName}>{currentUser.name}</Text>
           <Text style={styles.studentIdBadge}>MSSV: {currentUser.studentId}</Text>
-          <Text style={styles.majorText}>
-            {currentUser.major} • {currentUser.department}
-          </Text>
           <Text style={styles.emailText}>✉ {currentUser.email}</Text>
         </View>
 
@@ -118,7 +117,7 @@ export const ProfileScreen: React.FC = () => {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: COLORS.success }]}>
+            <Text style={[styles.statNumber, { color: COLORS.available }]}>
               {completedCount}
             </Text>
             <Text style={styles.statLabel}>Đã check-in</Text>
@@ -171,7 +170,7 @@ export const ProfileScreen: React.FC = () => {
           >
             <Text style={styles.actionIcon}>🔄</Text>
             <View style={styles.actionContent}>
-              <Text style={[styles.actionTitle, { color: COLORS.danger }]}>
+              <Text style={[styles.actionTitle, { color: COLORS.occupied }]}>
                 Đặt lại dữ liệu ban đầu
               </Text>
               <Text style={styles.actionDesc}>
@@ -260,11 +259,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     marginBottom: 6,
-  },
-  majorText: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginBottom: 2,
   },
   emailText: {
     fontSize: 12,

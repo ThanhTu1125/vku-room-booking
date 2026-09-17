@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { Booking, Room } from '../types';
+import { Booking, Room, TimeSlot } from '../types';
 import { get15MinutesBeforeSlot } from './dateHelpers';
 
 // Modular imports từ expo-notifications
@@ -69,7 +69,8 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
  */
 export const scheduleBookingReminder = async (
   booking: Booking,
-  room: Room
+  room: Room,
+  timeSlot: TimeSlot
 ): Promise<string | undefined> => {
   try {
     const hasPermission = await requestNotificationPermissions();
@@ -78,12 +79,13 @@ export const scheduleBookingReminder = async (
       return undefined;
     }
 
-    const triggerDate = get15MinutesBeforeSlot(booking.date, booking.timeSlot.startTime);
+    const triggerDate = get15MinutesBeforeSlot(booking.date, timeSlot.startTime);
     const now = Date.now();
     const triggerTime = triggerDate.getTime();
+    const slotLabel = `${timeSlot.startTime} - ${timeSlot.endTime}`;
 
-    const title = `⏰ Nhắc nhở: Phiên học tại ${room.name} (${room.code})`;
-    const body = `Khung giờ ${booking.timeSlot.label} của bạn sẽ bắt đầu trong 15 phút nữa tại Tòa ${room.building}, Tầng ${room.floor}. Hãy chuẩn bị check-in!`;
+    const title = `⏰ Nhắc nhở: Phiên học tại ${room.name}`;
+    const body = `Khung giờ ${slotLabel} của bạn sẽ bắt đầu trong 15 phút nữa tại Tòa ${room.building}, Tầng ${room.floor}. Hãy chuẩn bị check-in!`;
 
     // Trường hợp 1: Ca học diễn ra trong tương lai (cách hiện tại > 30 giây)
     if (triggerTime > now + 30 * 1000) {
@@ -106,7 +108,7 @@ export const scheduleBookingReminder = async (
       const notificationId = await scheduleNotificationAsync({
         content: {
           title: `🔔 Đặt phòng thành công: ${room.name}`,
-          body: `Lịch đặt của bạn lúc ${booking.timeSlot.label} sắp bắt đầu! Mã QR check-in đã sẵn sàng trong thẻ phòng.`,
+          body: `Lịch đặt của bạn lúc ${slotLabel} sắp bắt đầu! Mã QR check-in đã sẵn sàng trong thẻ phòng.`,
           data: { bookingId: booking.id, roomId: room.id },
           sound: 'default',
         },

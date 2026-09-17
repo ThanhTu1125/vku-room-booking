@@ -3,8 +3,9 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBookingStore } from '../store/useBookingStore';
 import { Booking, Room } from '../types';
+import { TIME_SLOTS } from '../constants/timeSlots';
 import { QRModal } from '../components/QRModal';
-import { formatDisplayDate } from '../utils/dateHelpers';
+import { formatDisplayDate, formatSlotLabel } from '../utils/dateHelpers';
 import { COLORS } from '../constants/colors';
 
 type BookingTab = 'UPCOMING' | 'HISTORY';
@@ -21,11 +22,11 @@ export const MyBookingsScreen: React.FC = () => {
   const [showQRModal, setShowQRModal] = useState<boolean>(false);
 
   const upcomingBookings = bookings.filter(
-    b => b.status === 'CONFIRMED' || b.status === 'CHECKED_IN'
+    b => b.status === 'upcoming' || b.status === 'checked-in'
   );
 
   const historyBookings = bookings.filter(
-    b => b.status === 'CANCELLED' || b.status === 'EXPIRED'
+    b => b.status === 'completed' || b.status === 'cancelled'
   );
 
   const displayedBookings = activeTab === 'UPCOMING' ? upcomingBookings : historyBookings;
@@ -38,9 +39,12 @@ export const MyBookingsScreen: React.FC = () => {
   };
 
   const handleCancelBooking = (booking: Booking) => {
+    const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
+    const slotLabel = slot ? formatSlotLabel(slot) : booking.timeSlotId;
+
     Alert.alert(
       'Xác nhận hủy đặt phòng',
-      `Bạn có chắc chắn muốn hủy ca học ${booking.timeSlot.label} vào ngày ${booking.date}?`,
+      `Bạn có chắc chắn muốn hủy ca học ${slotLabel} vào ngày ${booking.date}?`,
       [
         { text: 'Không', style: 'cancel' },
         {
@@ -57,29 +61,35 @@ export const MyBookingsScreen: React.FC = () => {
 
   const renderBookingItem = ({ item }: { item: Booking }) => {
     const room = rooms.find(r => r.id === item.roomId);
-    const isUpcoming = item.status === 'CONFIRMED';
-    const isCheckedIn = item.status === 'CHECKED_IN';
-    const isCancelled = item.status === 'CANCELLED';
+    const slot = TIME_SLOTS.find(s => s.id === item.timeSlotId);
+    const isUpcoming = item.status === 'upcoming';
+    const isCheckedIn = item.status === 'checked-in';
+    const isCancelled = item.status === 'cancelled';
+    const isCompleted = item.status === 'completed';
 
-    let statusText = 'Đã xác nhận';
+    let statusText = 'Upcoming';
     let statusColor: string = COLORS.primary;
     let statusBg: string = COLORS.primarySoft;
 
     if (isCheckedIn) {
-      statusText = 'Đã check-in';
-      statusColor = COLORS.success;
-      statusBg = COLORS.successSoft;
+      statusText = 'Checked-in';
+      statusColor = COLORS.available;
+      statusBg = COLORS.availableSoft;
+    } else if (isCompleted) {
+      statusText = 'Completed';
+      statusColor = COLORS.textMuted;
+      statusBg = COLORS.divider;
     } else if (isCancelled) {
-      statusText = 'Đã hủy';
-      statusColor = COLORS.danger;
-      statusBg = COLORS.dangerSoft;
+      statusText = 'Cancelled';
+      statusColor = COLORS.occupied;
+      statusBg = COLORS.occupiedSoft;
     }
 
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.roomCodeBadge}>
-            <Text style={styles.roomCodeText}>{room?.code || 'PHÒNG'}</Text>
+          <View style={styles.buildingBadge}>
+            <Text style={styles.buildingBadgeText}>Tòa {room?.building || 'VKU'}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
             <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
@@ -88,7 +98,7 @@ export const MyBookingsScreen: React.FC = () => {
 
         <Text style={styles.roomName}>{room?.name || 'Phòng học VKU'}</Text>
         <Text style={styles.locationText}>
-          📍 {room?.building} • Tầng {room?.floor}
+          📍 Tầng {room?.floor || 1} • Sức chứa: {room?.capacity || 0} người
         </Text>
 
         <View style={styles.divider} />
@@ -100,17 +110,10 @@ export const MyBookingsScreen: React.FC = () => {
 
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>⏰ Ca học:</Text>
-          <Text style={styles.detailValue}>{item.timeSlot.label}</Text>
+          <Text style={styles.detailValue}>
+            {slot ? formatSlotLabel(slot) : item.timeSlotId}
+          </Text>
         </View>
-
-        {item.purpose ? (
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>🎯 Mục đích:</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>
-              {item.purpose}
-            </Text>
-          </View>
-        ) : null}
 
         {/* Buttons */}
         <View style={styles.cardActions}>
@@ -198,7 +201,7 @@ export const MyBookingsScreen: React.FC = () => {
         onCheckIn={id => {
           checkInBooking(id);
           if (selectedBooking) {
-            setSelectedBooking({ ...selectedBooking, status: 'CHECKED_IN' });
+            setSelectedBooking({ ...selectedBooking, status: 'checked-in' });
           }
           Alert.alert('Thành công', 'Đã mô phỏng check-in phòng học!');
         }}
@@ -277,13 +280,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  roomCodeBadge: {
+  buildingBadge: {
     backgroundColor: COLORS.primarySoft,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
-  roomCodeText: {
+  buildingBadgeText: {
     color: COLORS.primary,
     fontWeight: '700',
     fontSize: 12,

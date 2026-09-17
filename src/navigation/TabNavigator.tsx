@@ -12,7 +12,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const TabNavigator: React.FC = () => {
   const bookings = useBookingStore(state => state.bookings);
-  const activeBookingsCount = bookings.filter(b => b.status === 'CONFIRMED').length;
+  const activeBookingsCount = bookings.filter(b => b.status === 'upcoming').length;
 
   return (
     <Tab.Navigator

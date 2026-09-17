@@ -14,8 +14,8 @@ export const isSlotBooked = (
     b =>
       b.roomId === roomId &&
       b.date === date &&
-      b.timeSlot.id === timeSlotId &&
-      (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')
+      b.timeSlotId === timeSlotId &&
+      (b.status === 'upcoming' || b.status === 'checked-in')
   );
 };
 
@@ -32,9 +32,9 @@ export const getBookedSlotIdsForRoom = (
       b =>
         b.roomId === roomId &&
         b.date === date &&
-        (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')
+        (b.status === 'upcoming' || b.status === 'checked-in')
     )
-    .map(b => b.timeSlot.id);
+    .map(b => b.timeSlotId);
 };
 
 export type SlotAvailabilityStatus = 'AVAILABLE' | 'BOOKED' | 'PAST';
@@ -72,7 +72,7 @@ export const hasUserConflict = (
     b =>
       b.userId === userId &&
       b.date === date &&
-      b.timeSlot.id === timeSlotId &&
-      (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')
+      b.timeSlotId === timeSlotId &&
+      (b.status === 'upcoming' || b.status === 'checked-in')
   );
 };

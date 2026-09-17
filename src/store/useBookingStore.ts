@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Booking, Room, TimeSlot, User } from '../types';
 import { MOCK_ROOMS } from '../data/rooms';
 import { MOCK_BOOKINGS } from '../data/bookings';
+import { MOCK_USER } from '../data/mockUser';
 import { generateBookingId, generateQrPayload } from '../utils/idGenerator';
 import { isSlotBooked, hasUserConflict } from '../utils/conflictChecker';
 import {
@@ -21,7 +22,6 @@ interface BookingState {
     roomId: string;
     date: string;
     timeSlot: TimeSlot;
-    purpose: string;
   }) => Promise<{ success: boolean; error?: string; booking?: Booking }>;
 
   cancelBooking: (bookingId: string) => Promise<boolean>;
@@ -30,30 +30,18 @@ interface BookingState {
   resetToMockData: () => void;
 }
 
-const DEFAULT_USER: User = {
-  id: 'user_vku_23it296',
-  studentId: '23IT296',
-  fullName: 'Nguyễn Thanh Tú',
-  email: 'tunt.23it@vku.udn.vn',
-  major: 'Kỹ thuật Phần mềm (VKU)',
-  phone: '0905 123 456',
-  department: 'Khoa Khoa học Máy tính',
-  avatarUrl:
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-};
-
 export const useBookingStore = create<BookingState>()(
   persist(
     (set, get) => ({
       rooms: MOCK_ROOMS,
       bookings: MOCK_BOOKINGS,
-      currentUser: DEFAULT_USER,
+      currentUser: MOCK_USER,
 
       getRoomById: (roomId: string) => {
         return get().rooms.find(r => r.id === roomId);
       },
 
-      createBooking: async ({ roomId, date, timeSlot, purpose }) => {
+      createBooking: async ({ roomId, date, timeSlot }) => {
         const { rooms, bookings, currentUser } = get();
         const room = rooms.find(r => r.id === roomId);
 
@@ -65,7 +53,7 @@ export const useBookingStore = create<BookingState>()(
         if (isSlotBooked(roomId, date, timeSlot.id, bookings)) {
           return {
             success: false,
-            error: `Khung giờ ${timeSlot.label} của ${room.name} đã được đặt bởi sinh viên khác!`,
+            error: `Khung giờ ${timeSlot.startTime} - ${timeSlot.endTime} của ${room.name} đã được đặt bởi sinh viên khác!`,
           };
         }
 
@@ -73,12 +61,12 @@ export const useBookingStore = create<BookingState>()(
         if (hasUserConflict(currentUser.id, date, timeSlot.id, bookings)) {
           return {
             success: false,
-            error: `Bạn đã có lịch đặt phòng khác trong ${timeSlot.label} vào ngày này.`,
+            error: `Bạn đã có lịch đặt phòng khác trong khung giờ này vào ngày ${date}.`,
           };
         }
 
         const newBookingId = generateBookingId();
-        const qrCode = generateQrPayload({
+        const qrPayload = generateQrPayload({
           bookingId: newBookingId,
           roomId,
           date,
@@ -90,22 +78,16 @@ export const useBookingStore = create<BookingState>()(
           id: newBookingId,
           roomId,
           userId: currentUser.id,
-          userName: currentUser.fullName,
-          studentId: currentUser.studentId,
           date,
-          timeSlot,
-          purpose: purpose.trim() || 'Học tập / Nghiên cứu tự do',
-          status: 'CONFIRMED',
-          qrCode,
+          timeSlotId: timeSlot.id,
+          status: 'upcoming',
+          qrPayload,
           createdAt: new Date().toISOString(),
         };
 
         // Lập lịch nhắc nhở Local Notification trước 15 phút
         try {
-          const notificationId = await scheduleBookingReminder(newBooking, room);
-          if (notificationId) {
-            newBooking.notificationId = notificationId;
-          }
+          await scheduleBookingReminder(newBooking, room, timeSlot);
         } catch (e) {
           console.warn('Không thể lên lịch notification:', e);
         }
@@ -122,14 +104,15 @@ export const useBookingStore = create<BookingState>()(
         const booking = bookings.find(b => b.id === bookingId);
         if (!booking) return false;
 
-        // Hủy notification đã lên lịch
-        if (booking.notificationId) {
-          await cancelScheduledNotification(booking.notificationId);
+        try {
+          await cancelScheduledNotification(booking.id);
+        } catch (e) {
+          console.warn('Lỗi khi hủy notification:', e);
         }
 
         set({
           bookings: bookings.map(b =>
-            b.id === bookingId ? { ...b, status: 'CANCELLED' as const } : b
+            b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
           ),
         });
         return true;
@@ -138,17 +121,11 @@ export const useBookingStore = create<BookingState>()(
       checkInBooking: (bookingId: string) => {
         const { bookings } = get();
         const booking = bookings.find(b => b.id === bookingId);
-        if (!booking || booking.status !== 'CONFIRMED') return false;
+        if (!booking || booking.status !== 'upcoming') return false;
 
         set({
           bookings: bookings.map(b =>
-            b.id === bookingId
-              ? {
-                  ...b,
-                  status: 'CHECKED_IN' as const,
-                  checkedInAt: new Date().toISOString(),
-                }
-              : b
+            b.id === bookingId ? { ...b, status: 'checked-in' as const } : b
           ),
         });
         return true;
@@ -158,6 +135,7 @@ export const useBookingStore = create<BookingState>()(
         set({
           rooms: MOCK_ROOMS,
           bookings: MOCK_BOOKINGS,
+          currentUser: MOCK_USER,
         });
       },
     }),

@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Room } from '../types';
 import { COLORS } from '../constants/colors';
-import { EQUIPMENT_LIST } from '../constants/equipment';
 
 interface RoomCardProps {
   room: Room;
@@ -17,30 +16,17 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   totalSlotsCount: _totalSlotsCount,
   onPress,
 }) => {
-  const isAvailable = availableSlotsCount > 0;
+  const hasSlots = availableSlotsCount > 0;
+  const isRoomAvailable = room.status === 'available';
 
-  // Lấy nhãn thiết bị hiển thị tóm tắt (tối đa 2 món)
-  const equipmentSummary = room.equipments
-    .slice(0, 2)
-    .map(eq => {
-      const found = EQUIPMENT_LIST.find(item => item.id === eq);
-      return found ? found.label.split('/')[0].trim() : eq;
-    })
-    .join(' • ');
-
-  const typeLabels: Record<string, string> = {
-    STUDY: 'Tự học',
-    LAB: 'Phòng Lab',
-    MEETING: 'Thảo luận',
-    WORKSHOP: 'Workshop',
-  };
+  const equipmentSummary = room.equipment.slice(0, 3).join(' • ');
 
   return (
     <TouchableOpacity activeOpacity={0.85} style={styles.card} onPress={onPress}>
       <View style={styles.imageContainer}>
-        <Image source={{ uri: room.imageUrl }} style={styles.image} resizeMode="cover" />
-        <View style={styles.typeBadge}>
-          <Text style={styles.typeText}>{typeLabels[room.type] || room.type}</Text>
+        <Image source={{ uri: room.photoUrl }} style={styles.image} resizeMode="cover" />
+        <View style={styles.buildingBadge}>
+          <Text style={styles.buildingBadgeText}>Tòa {room.building}</Text>
         </View>
         <View style={styles.capacityBadge}>
           <Text style={styles.capacityText}>{room.capacity} chỗ</Text>
@@ -49,28 +35,51 @@ export const RoomCard: React.FC<RoomCardProps> = ({
 
       <View style={styles.body}>
         <View style={styles.headerRow}>
-          <View style={styles.codeBadge}>
-            <Text style={styles.codeText}>{room.code}</Text>
-          </View>
           <View
             style={[
-              styles.statusPill,
-              { backgroundColor: isAvailable ? COLORS.successSoft : COLORS.dangerSoft },
+              styles.roomStatusPill,
+              {
+                backgroundColor: isRoomAvailable
+                  ? COLORS.availableSoft
+                  : COLORS.occupiedSoft,
+              },
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: isAvailable ? COLORS.success : COLORS.danger },
+                {
+                  backgroundColor: isRoomAvailable ? COLORS.available : COLORS.occupied,
+                },
               ]}
             />
             <Text
               style={[
-                styles.statusPillText,
-                { color: isAvailable ? COLORS.success : COLORS.danger },
+                styles.roomStatusText,
+                {
+                  color: isRoomAvailable ? COLORS.available : COLORS.occupied,
+                },
               ]}
             >
-              {isAvailable ? `Còn ${availableSlotsCount} ca trống` : 'Đã kín lịch'}
+              {isRoomAvailable ? 'Available' : 'Occupied'}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.slotStatusPill,
+              {
+                backgroundColor: hasSlots ? COLORS.successSoft : COLORS.dangerSoft,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.slotStatusText,
+                { color: hasSlots ? COLORS.success : COLORS.danger },
+              ]}
+            >
+              {hasSlots ? `Còn ${availableSlotsCount} ca` : 'Đã kín ca'}
             </Text>
           </View>
         </View>
@@ -80,13 +89,13 @@ export const RoomCard: React.FC<RoomCardProps> = ({
         </Text>
 
         <Text style={styles.locationText}>
-          📍 {room.building} • Tầng {room.floor}
+          📍 Tòa {room.building} • Tầng {room.floor}
         </Text>
 
         {equipmentSummary ? (
           <Text style={styles.equipmentText} numberOfLines={1}>
             ⚡ {equipmentSummary}
-            {room.equipments.length > 2 ? ` +${room.equipments.length - 2}` : ''}
+            {room.equipment.length > 3 ? ` +${room.equipment.length - 3}` : ''}
           </Text>
         ) : null}
       </View>
@@ -118,25 +127,25 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  typeBadge: {
+  buildingBadge: {
     position: 'absolute',
     top: 10,
     left: 10,
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 6,
   },
-  typeText: {
+  buildingBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
   capacityBadge: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(29, 78, 216, 0.85)',
+    backgroundColor: 'rgba(29, 78, 216, 0.9)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -153,20 +162,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  codeBadge: {
-    backgroundColor: COLORS.primarySoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  codeText: {
-    color: COLORS.primary,
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  statusPill: {
+  roomStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -179,7 +177,17 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginRight: 5,
   },
-  statusPillText: {
+  roomStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  slotStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  slotStatusText: {
     fontSize: 11,
     fontWeight: '600',
   },

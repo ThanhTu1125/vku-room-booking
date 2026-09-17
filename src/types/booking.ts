@@ -1,24 +1,18 @@
 export interface TimeSlot {
-  id: string; // 'slot_1', 'slot_2', ...
-  label: string; // 'Ca 1 (07:00 - 09:00)'
-  startTime: string; // '07:00'
-  endTime: string; // '09:00'
+  id: string;
+  startTime: string; // ví dụ "07:30"
+  endTime: string; // ví dụ "09:30"
 }
 
-export type BookingStatus = 'CONFIRMED' | 'CHECKED_IN' | 'CANCELLED' | 'EXPIRED';
+export type BookingStatus = 'upcoming' | 'checked-in' | 'completed' | 'cancelled';
 
 export interface Booking {
   id: string;
   roomId: string;
   userId: string;
-  userName?: string;
-  studentId?: string;
-  date: string; // YYYY-MM-DD
-  timeSlot: TimeSlot;
-  purpose: string;
+  date: string; // ISO yyyy-MM-dd
+  timeSlotId: string;
   status: BookingStatus;
-  qrCode: string; // Chuỗi token hoặc JSON để quét check-in
-  notificationId?: string;
+  qrPayload: string;
   createdAt: string;
-  checkedInAt?: string;
 }

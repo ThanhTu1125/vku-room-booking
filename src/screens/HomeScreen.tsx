@@ -6,6 +6,7 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -18,7 +19,9 @@ import { RoomCard } from '../components/RoomCard';
 import { DateSelector } from '../components/DateSelector';
 import { FilterChip } from '../components/FilterChip';
 import { BUILDINGS } from '../constants/buildings';
+import { CAPACITY_RANGES } from '../constants/capacityRanges';
 import { COLORS } from '../constants/colors';
+import { Building } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -30,6 +33,8 @@ export const HomeScreen: React.FC = () => {
 
   const selectedBuilding = useFilterStore(state => state.selectedBuilding);
   const setBuilding = useFilterStore(state => state.setBuilding);
+  const selectedCapacityRangeId = useFilterStore(state => state.selectedCapacityRangeId);
+  const setCapacityRange = useFilterStore(state => state.setCapacityRange);
   const setDate = useFilterStore(state => state.setDate);
   const searchQuery = useFilterStore(state => state.searchQuery);
   const setSearchQuery = useFilterStore(state => state.setSearchQuery);
@@ -44,7 +49,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.welcomeTitle}>VKU Study Space 🎓</Text>
         </View>
         <View style={styles.userBadge}>
-          <Text style={styles.userBadgeText}>{currentUser.studentId || '23IT'}</Text>
+          <Text style={styles.userBadgeText}>{currentUser.studentId || '23IT296'}</Text>
         </View>
       </View>
 
@@ -53,7 +58,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.searchBar}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            placeholder="Tìm theo tên phòng, mã phòng, tầng..."
+            placeholder="Tìm kiếm theo tên phòng, tòa nhà..."
             placeholderTextColor={COLORS.textSubtle}
             style={styles.searchInput}
             value={searchQuery}
@@ -70,26 +75,49 @@ export const HomeScreen: React.FC = () => {
 
       {/* Date Selector Row */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>📅 Chọn ngày đặt phòng</Text>
+        <Text style={styles.sectionTitle}>📅 Chọn ngày mượn phòng</Text>
       </View>
       <DateSelector selectedDate={selectedDate} onSelectDate={setDate} />
 
       {/* Building Filter Chips */}
       <View style={styles.filterSection}>
-        <FlatList
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterList}
-          data={BUILDINGS}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
+        >
+          <FilterChip
+            label="Tất cả các tòa"
+            isSelected={selectedBuilding === 'ALL'}
+            onPress={() => setBuilding('ALL')}
+          />
+          {BUILDINGS.map(b => (
             <FilterChip
-              label={item.shortName}
-              isSelected={selectedBuilding === item.id}
-              onPress={() => setBuilding(item.id)}
+              key={b}
+              label={`Tòa ${b}`}
+              isSelected={selectedBuilding === b}
+              onPress={() => setBuilding(b as Building)}
             />
-          )}
-        />
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Capacity Range Filter Chips */}
+      <View style={styles.filterSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterList}
+        >
+          {CAPACITY_RANGES.map(range => (
+            <FilterChip
+              key={range.id}
+              label={range.label}
+              isSelected={selectedCapacityRangeId === range.id}
+              onPress={() => setCapacityRange(range.id, range.min, range.max)}
+            />
+          ))}
+        </ScrollView>
       </View>
 
       {/* Room Count & Reset Button */}
@@ -128,7 +156,7 @@ export const HomeScreen: React.FC = () => {
             <Text style={styles.emptyEmoji}>🏢</Text>
             <Text style={styles.emptyTitle}>Không tìm thấy phòng phù hợp</Text>
             <Text style={styles.emptySubtitle}>
-              Hãy thử chọn ngày khác hoặc bỏ bớt các tiêu chí lọc tòa nhà.
+              Hãy thử chọn ngày khác hoặc mở rộng tiêu chí lọc tòa nhà và sức chứa.
             </Text>
             <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
               <Text style={styles.resetBtnText}>Xem tất cả phòng</Text>
@@ -215,7 +243,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   filterSection: {
-    marginVertical: 4,
+    marginVertical: 2,
   },
   filterList: {
     paddingHorizontal: 16,

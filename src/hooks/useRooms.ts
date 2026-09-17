@@ -16,56 +16,49 @@ export const useRooms = () => {
 
   const selectedDate = useFilterStore(state => state.selectedDate);
   const selectedBuilding = useFilterStore(state => state.selectedBuilding);
-  const selectedType = useFilterStore(state => state.selectedType);
+  const selectedCapacityRangeId = useFilterStore(state => state.selectedCapacityRangeId);
   const minCapacity = useFilterStore(state => state.minCapacity);
+  const maxCapacity = useFilterStore(state => state.maxCapacity);
   const selectedEquipments = useFilterStore(state => state.selectedEquipments);
   const searchQuery = useFilterStore(state => state.searchQuery);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedBuilding !== 'ALL') count++;
-    if (selectedType) count++;
-    if (minCapacity > 1) count++;
+    if (selectedCapacityRangeId !== 'all') count++;
     if (selectedEquipments.length > 0) count += selectedEquipments.length;
     return count;
-  }, [selectedBuilding, selectedType, minCapacity, selectedEquipments]);
+  }, [selectedBuilding, selectedCapacityRangeId, selectedEquipments]);
 
   const filteredRooms: RoomWithAvailability[] = useMemo(() => {
     return rooms
       .filter(room => {
-        if (!room.isActive) return false;
-
-        // 1. Tòa nhà
+        // 1. Tòa nhà (A, B, C, V)
         if (selectedBuilding !== 'ALL' && room.building !== selectedBuilding) {
           return false;
         }
 
-        // 2. Loại phòng
-        if (selectedType && room.type !== selectedType) {
+        // 2. Sức chứa
+        if (room.capacity < minCapacity || room.capacity > maxCapacity) {
           return false;
         }
 
-        // 3. Sức chứa tối thiểu
-        if (room.capacity < minCapacity) {
-          return false;
-        }
-
-        // 4. Trang thiết bị
+        // 3. Trang thiết bị
         if (selectedEquipments.length > 0) {
           const hasAllEquipments = selectedEquipments.every(eq =>
-            room.equipments.includes(eq)
+            room.equipment.includes(eq)
           );
           if (!hasAllEquipments) return false;
         }
 
-        // 5. Tìm kiếm từ khóa
+        // 4. Tìm kiếm từ khóa theo tên phòng hoặc tòa nhà
         if (searchQuery.trim()) {
           const query = searchQuery.toLowerCase().trim();
-          const matchCode = room.code.toLowerCase().includes(query);
           const matchName = room.name.toLowerCase().includes(query);
-          const matchBuilding = room.building.toLowerCase().includes(query);
-          const matchDesc = room.description.toLowerCase().includes(query);
-          if (!matchCode && !matchName && !matchBuilding && !matchDesc) {
+          const matchBuilding =
+            `tòa ${room.building}`.toLowerCase().includes(query) ||
+            room.building.toLowerCase() === query;
+          if (!matchName && !matchBuilding) {
             return false;
           }
         }
@@ -93,8 +86,8 @@ export const useRooms = () => {
     bookings,
     selectedDate,
     selectedBuilding,
-    selectedType,
     minCapacity,
+    maxCapacity,
     selectedEquipments,
     searchQuery,
   ]);

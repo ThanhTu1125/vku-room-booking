@@ -1,20 +1,20 @@
 import { create } from 'zustand';
-import { Equipment, RoomType } from '../types';
+import { Building, Equipment } from '../types';
 import { getTodayString } from '../utils/dateHelpers';
 
 interface FilterState {
   selectedDate: string; // YYYY-MM-DD
-  selectedBuilding: string; // 'ALL' hoặc 'Khu K', 'Khu V'...
-  selectedType?: RoomType;
+  selectedBuilding: 'ALL' | Building;
+  selectedCapacityRangeId: string; // 'all', '2-5', '6-10', '11-20'
   minCapacity: number;
+  maxCapacity: number;
   selectedEquipments: Equipment[];
   searchQuery: string;
 
   // Actions
   setDate: (date: string) => void;
-  setBuilding: (building: string) => void;
-  setType: (type?: RoomType) => void;
-  setMinCapacity: (capacity: number) => void;
+  setBuilding: (building: 'ALL' | Building) => void;
+  setCapacityRange: (rangeId: string, min: number, max: number) => void;
   toggleEquipment: (eq: Equipment) => void;
   setSearchQuery: (query: string) => void;
   resetFilters: () => void;
@@ -23,15 +23,20 @@ interface FilterState {
 export const useFilterStore = create<FilterState>(set => ({
   selectedDate: getTodayString(),
   selectedBuilding: 'ALL',
-  selectedType: undefined,
+  selectedCapacityRangeId: 'all',
   minCapacity: 1,
+  maxCapacity: 100,
   selectedEquipments: [],
   searchQuery: '',
 
   setDate: (date: string) => set({ selectedDate: date }),
-  setBuilding: (building: string) => set({ selectedBuilding: building }),
-  setType: (type?: RoomType) => set({ selectedType: type }),
-  setMinCapacity: (capacity: number) => set({ minCapacity: capacity }),
+  setBuilding: (building: 'ALL' | Building) => set({ selectedBuilding: building }),
+  setCapacityRange: (rangeId: string, min: number, max: number) =>
+    set({
+      selectedCapacityRangeId: rangeId,
+      minCapacity: min,
+      maxCapacity: max,
+    }),
   toggleEquipment: (eq: Equipment) =>
     set(state => ({
       selectedEquipments: state.selectedEquipments.includes(eq)
@@ -43,8 +48,9 @@ export const useFilterStore = create<FilterState>(set => ({
     set({
       selectedDate: getTodayString(),
       selectedBuilding: 'ALL',
-      selectedType: undefined,
+      selectedCapacityRangeId: 'all',
       minCapacity: 1,
+      maxCapacity: 100,
       selectedEquipments: [],
       searchQuery: '',
     }),

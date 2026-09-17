@@ -1,11 +1,42 @@
 import { format, parse, addDays, isBefore, subMinutes } from 'date-fns';
+import { TimeSlot } from '../types';
 
-export interface DateItem {
-  fullDate: string; // YYYY-MM-DD
-  dayOfWeek: string; // T2, T3, T4...
-  dayOfMonth: string; // 17, 18...
-  isToday: boolean;
+export interface NextDayItem {
+  date: string; // ISO yyyy-MM-dd
+  label: string; // ví dụ "Hôm nay 17/09", "T6 18/09"
 }
+
+/**
+ * Trả về mảng 7 ngày kể từ hôm nay (dùng date-fns)
+ * Mỗi phần tử gồm { date: string ISO, label: string }
+ */
+export const getNext7Days = (): NextDayItem[] => {
+  const result: NextDayItem[] = [];
+  const today = new Date();
+  const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+  for (let i = 0; i < 7; i++) {
+    const current = addDays(today, i);
+    const date = format(current, 'yyyy-MM-dd');
+    const dayOfWeek = dayNames[current.getDay()];
+    const dayMonth = format(current, 'dd/MM');
+    const label = i === 0 ? `Hôm nay ${dayMonth}` : `${dayOfWeek} ${dayMonth}`;
+
+    result.push({
+      date,
+      label,
+    });
+  }
+
+  return result;
+};
+
+/**
+ * Format nhãn hiển thị cho một TimeSlot (ví dụ "07:30 - 09:30")
+ */
+export const formatSlotLabel = (slot: TimeSlot): string => {
+  return `${slot.startTime} - ${slot.endTime}`;
+};
 
 /**
  * Lấy ngày hôm nay dưới dạng YYYY-MM-DD
@@ -15,30 +46,7 @@ export const getTodayString = (): string => {
 };
 
 /**
- * Lấy danh sách n ngày tiếp theo tính từ hôm nay để làm DateSelector
- */
-export const getUpcomingDates = (daysCount: number = 7): DateItem[] => {
-  const dates: DateItem[] = [];
-  const today = new Date();
-
-  for (let i = 0; i < daysCount; i++) {
-    const current = addDays(today, i);
-    const dayOfWeekIndex = current.getDay();
-    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-
-    dates.push({
-      fullDate: format(current, 'yyyy-MM-dd'),
-      dayOfWeek: i === 0 ? 'Hôm nay' : dayNames[dayOfWeekIndex],
-      dayOfMonth: format(current, 'dd/MM'),
-      isToday: i === 0,
-    });
-  }
-
-  return dates;
-};
-
-/**
- * Định dạng chuỗi ngày YYYY-MM-DD sang định dạng hiển thị tiếng Việt (VD: Thứ Năm, 17/09/2026)
+ * Định dạng chuỗi ngày YYYY-MM-DD sang hiển thị tiếng Việt (VD: Thứ Năm, 17/09/2026)
  */
 export const formatDisplayDate = (dateStr: string): string => {
   try {

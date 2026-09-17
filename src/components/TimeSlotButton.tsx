@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, View, StyleSheet } from 'react-native';
 import { TimeSlot } from '../types';
 import { SlotAvailabilityStatus } from '../utils/conflictChecker';
+import { formatSlotLabel } from '../utils/dateHelpers';
 import { COLORS } from '../constants/colors';
 
 interface TimeSlotButtonProps {
@@ -22,13 +23,13 @@ export const TimeSlotButton: React.FC<TimeSlotButtonProps> = ({
   const isPast = status === 'PAST';
 
   let statusLabel = 'Còn trống';
-  let badgeColor: string = COLORS.success;
-  let badgeBg: string = COLORS.successSoft;
+  let badgeColor: string = COLORS.available;
+  let badgeBg: string = COLORS.availableSoft;
 
   if (isBooked) {
     statusLabel = 'Đã đặt';
-    badgeColor = COLORS.danger;
-    badgeBg = COLORS.dangerSoft;
+    badgeColor = COLORS.occupied;
+    badgeBg = COLORS.occupiedSoft;
   } else if (isPast) {
     statusLabel = 'Đã qua';
     badgeColor = COLORS.textSubtle;
@@ -55,7 +56,7 @@ export const TimeSlotButton: React.FC<TimeSlotButtonProps> = ({
             !isAvailable && styles.textDisabled,
           ]}
         >
-          {slot.label}
+          {formatSlotLabel(slot)}
         </Text>
         <Text
           style={[
@@ -64,7 +65,7 @@ export const TimeSlotButton: React.FC<TimeSlotButtonProps> = ({
             !isAvailable && styles.textDisabled,
           ]}
         >
-          {slot.startTime} - {slot.endTime}
+          {slot.startTime} - {slot.endTime} (2 tiếng)
         </Text>
       </View>
 

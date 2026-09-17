@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { getUpcomingDates } from '../utils/dateHelpers';
+import { getNext7Days } from '../utils/dateHelpers';
 import { COLORS } from '../constants/colors';
 
 interface DateSelectorProps {
@@ -12,7 +12,7 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
   selectedDate,
   onSelectDate,
 }) => {
-  const dates = getUpcomingDates(7);
+  const days = getNext7Days();
 
   return (
     <ScrollView
@@ -20,21 +20,22 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.container}
     >
-      {dates.map(item => {
-        const isSelected = item.fullDate === selectedDate;
+      {days.map(item => {
+        const isSelected = item.date === selectedDate;
+        const [dayPart, datePart] = item.label.split(' ');
 
         return (
           <TouchableOpacity
-            key={item.fullDate}
+            key={item.date}
             activeOpacity={0.7}
-            onPress={() => onSelectDate(item.fullDate)}
+            onPress={() => onSelectDate(item.date)}
             style={[styles.dateCard, isSelected && styles.dateCardSelected]}
           >
             <Text style={[styles.dayOfWeek, isSelected && styles.textSelected]}>
-              {item.dayOfWeek}
+              {dayPart}
             </Text>
             <Text style={[styles.dayOfMonth, isSelected && styles.textSelected]}>
-              {item.dayOfMonth}
+              {datePart || dayPart}
             </Text>
           </TouchableOpacity>
         );
@@ -49,7 +50,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   dateCard: {
-    width: 68,
+    width: 72,
     height: 72,
     borderRadius: 14,
     backgroundColor: COLORS.card,

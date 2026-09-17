@@ -2,8 +2,10 @@ import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Booking, Room } from '../types';
+import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
-import { formatDisplayDate } from '../utils/dateHelpers';
+import { formatDisplayDate, formatSlotLabel } from '../utils/dateHelpers';
+import { useBookingStore } from '../store/useBookingStore';
 
 interface QRModalProps {
   visible: boolean;
@@ -20,9 +22,13 @@ export const QRModal: React.FC<QRModalProps> = ({
   onClose,
   onCheckIn,
 }) => {
+  const currentUser = useBookingStore(state => state.currentUser);
+
   if (!booking) return null;
 
-  const isCheckedIn = booking.status === 'CHECKED_IN';
+  const isCheckedIn = booking.status === 'checked-in';
+  const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
+  const timeText = slot ? formatSlotLabel(slot) : booking.timeSlotId;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -47,7 +53,7 @@ export const QRModal: React.FC<QRModalProps> = ({
           <View style={styles.qrContainer}>
             <View style={styles.qrWrapper}>
               <QRCode
-                value={booking.qrCode || booking.id}
+                value={booking.qrPayload || booking.id}
                 size={180}
                 color={COLORS.text}
                 backgroundColor="#FFFFFF"
@@ -63,13 +69,13 @@ export const QRModal: React.FC<QRModalProps> = ({
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Phòng học:</Text>
               <Text style={styles.infoValue}>
-                {room ? `${room.name} (${room.code})` : booking.roomId}
+                {room ? `${room.name} (Tòa ${room.building})` : booking.roomId}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Thời gian:</Text>
-              <Text style={styles.infoValue}>{booking.timeSlot.label}</Text>
+              <Text style={styles.infoValue}>{timeText}</Text>
             </View>
 
             <View style={styles.infoRow}>
@@ -80,7 +86,7 @@ export const QRModal: React.FC<QRModalProps> = ({
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Sinh viên:</Text>
               <Text style={styles.infoValue}>
-                {booking.userName} ({booking.studentId})
+                {currentUser.name} ({currentUser.studentId})
               </Text>
             </View>
 

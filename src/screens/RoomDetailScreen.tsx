@@ -6,7 +6,6 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  TextInput,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,13 +13,12 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
 import { useBookingStore } from '../store/useBookingStore';
 import { TIME_SLOTS } from '../constants/timeSlots';
-import { EQUIPMENT_LIST } from '../constants/equipment';
 import { TimeSlot, Booking } from '../types';
 import { TimeSlotButton } from '../components/TimeSlotButton';
 import { DateSelector } from '../components/DateSelector';
 import { QRModal } from '../components/QRModal';
 import { getSlotAvailability } from '../utils/conflictChecker';
-import { formatDisplayDate } from '../utils/dateHelpers';
+import { formatDisplayDate, formatSlotLabel } from '../utils/dateHelpers';
 import { COLORS } from '../constants/colors';
 
 type RouteProps = RouteProp<RootStackParamList, 'RoomDetail'>;
@@ -39,7 +37,6 @@ export const RoomDetailScreen: React.FC = () => {
     initialDate || new Date().toISOString().split('T')[0]
   );
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [purpose, setPurpose] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Modal QR Code sau khi đặt thành công
@@ -63,20 +60,11 @@ export const RoomDetailScreen: React.FC = () => {
       return;
     }
 
-    if (!purpose.trim()) {
-      Alert.alert(
-        'Nhập mục đích sử dụng',
-        'Vui lòng nhập ngắn gọn lý do mượn phòng (VD: Ôn thi, làm đồ án...)'
-      );
-      return;
-    }
-
     setIsSubmitting(true);
     const result = await createBooking({
       roomId: room.id,
       date: currentDate,
       timeSlot: selectedSlot,
-      purpose,
     });
     setIsSubmitting(false);
 
@@ -84,7 +72,6 @@ export const RoomDetailScreen: React.FC = () => {
       setCreatedBooking(result.booking);
       setShowQRModal(true);
       setSelectedSlot(null);
-      setPurpose('');
     } else {
       Alert.alert('Không thể đặt phòng', result.error || 'Đã xảy ra lỗi trùng lịch.');
     }
@@ -101,7 +88,7 @@ export const RoomDetailScreen: React.FC = () => {
           <Text style={styles.circleBackBtnText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>
-          {room.code} - {room.name}
+          {room.name}
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -113,13 +100,13 @@ export const RoomDetailScreen: React.FC = () => {
         {/* Banner Image */}
         <View style={styles.bannerContainer}>
           <Image
-            source={{ uri: room.imageUrl }}
+            source={{ uri: room.photoUrl }}
             style={styles.bannerImage}
             resizeMode="cover"
           />
           <View style={styles.bannerOverlay}>
             <View style={styles.codeTag}>
-              <Text style={styles.codeTagText}>{room.code}</Text>
+              <Text style={styles.codeTagText}>Tòa {room.building}</Text>
             </View>
             <View style={styles.capacityTag}>
               <Text style={styles.capacityTagText}>Sức chứa: {room.capacity} người</Text>
@@ -129,25 +116,45 @@ export const RoomDetailScreen: React.FC = () => {
 
         {/* Room Info */}
         <View style={styles.infoCard}>
-          <Text style={styles.roomName}>{room.name}</Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.roomName}>{room.name}</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor:
+                    room.status === 'available'
+                      ? COLORS.availableSoft
+                      : COLORS.occupiedSoft,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  {
+                    color:
+                      room.status === 'available' ? COLORS.available : COLORS.occupied,
+                  },
+                ]}
+              >
+                {room.status === 'available' ? 'Available' : 'Occupied'}
+              </Text>
+            </View>
+          </View>
+
           <Text style={styles.roomLocation}>
             📍 Tòa nhà {room.building} • Tầng {room.floor}
           </Text>
-          <Text style={styles.roomDescription}>{room.description}</Text>
 
           {/* Equipment List */}
-          <Text style={styles.sectionHeader}>Trang thiết bị sẵn có</Text>
+          <Text style={styles.sectionHeader}>Trang thiết bị phòng</Text>
           <View style={styles.equipmentWrap}>
-            {room.equipments.map(eq => {
-              const item = EQUIPMENT_LIST.find(e => e.id === eq);
-              return (
-                <View key={eq} style={styles.equipmentBadge}>
-                  <Text style={styles.equipmentBadgeText}>
-                    ✓ {item ? item.label : eq}
-                  </Text>
-                </View>
-              );
-            })}
+            {room.equipment.map(eq => (
+              <View key={eq} style={styles.equipmentBadge}>
+                <Text style={styles.equipmentBadgeText}>✓ {eq}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
@@ -186,20 +193,6 @@ export const RoomDetailScreen: React.FC = () => {
             })}
           </View>
 
-          {/* Purpose Input */}
-          <Text style={[styles.sectionHeader, { marginTop: 12 }]}>
-            Mục đích mượn phòng
-          </Text>
-          <TextInput
-            placeholder="VD: Họp nhóm đồ án Lập trình Di động..."
-            placeholderTextColor={COLORS.textSubtle}
-            style={styles.purposeInput}
-            value={purpose}
-            onChangeText={setPurpose}
-            multiline
-            numberOfLines={2}
-          />
-
           {/* Submit Booking Button */}
           <TouchableOpacity
             style={[
@@ -214,7 +207,7 @@ export const RoomDetailScreen: React.FC = () => {
               {isSubmitting
                 ? 'Đang xử lý...'
                 : selectedSlot
-                  ? `Xác nhận đặt: ${selectedSlot.label.split('(')[0]}`
+                  ? `Xác nhận đặt: ${formatSlotLabel(selectedSlot)}`
                   : 'Vui lòng chọn ca học còn trống'}
             </Text>
           </TouchableOpacity>
@@ -230,7 +223,7 @@ export const RoomDetailScreen: React.FC = () => {
         onCheckIn={id => {
           checkInBooking(id);
           if (createdBooking) {
-            setCreatedBooking({ ...createdBooking, status: 'CHECKED_IN' });
+            setCreatedBooking({ ...createdBooking, status: 'checked-in' });
           }
           Alert.alert('Thành công', 'Đã check-in vào phòng học thành công!');
         }}
@@ -325,22 +318,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   roomName: {
     fontSize: 20,
     fontWeight: '800',
     color: COLORS.text,
-    marginBottom: 6,
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   roomLocation: {
     fontSize: 14,
     color: COLORS.textMuted,
-    marginBottom: 10,
-  },
-  roomDescription: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    lineHeight: 20,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   sectionHeader: {
     fontSize: 14,
@@ -388,21 +390,12 @@ const styles = StyleSheet.create({
   slotsContainer: {
     marginTop: 6,
   },
-  purposeInput: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    fontSize: 14,
-    color: COLORS.text,
-    marginBottom: 16,
-  },
   submitBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
+    marginTop: 12,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
