@@ -1,209 +1,152 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Room } from '../types';
-import {
-  Users,
-  Building2,
-  Layers,
-  ChevronRight,
-  Tv,
-  Projector,
-  Wifi,
-  Wind,
-  CheckCircle2,
-} from 'lucide-react-native';
+import { COLORS } from '../constants/colors';
+import { EQUIPMENT_LIST } from '../constants/equipment';
 
 interface RoomCardProps {
   room: Room;
-  onPress: (roomId: string) => void;
+  availableSlotsCount: number;
+  totalSlotsCount: number;
+  onPress: () => void;
 }
 
-const getBuildingTheme = (building: string) => {
-  switch (building) {
-    case 'A':
-      return { bg: '#DBEAFE', text: '#1E40AF', border: '#BFDBFE' };
-    case 'B':
-      return { bg: '#DCFCE7', text: '#166534', border: '#BBF7D0' };
-    case 'C':
-      return { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' };
-    case 'V':
-      return { bg: '#EDE9FE', text: '#5B21B6', border: '#DDD6FE' };
-    default:
-      return { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0' };
-  }
-};
+export const RoomCard: React.FC<RoomCardProps> = ({
+  room,
+  availableSlotsCount,
+  totalSlotsCount: _totalSlotsCount,
+  onPress,
+}) => {
+  const isAvailable = availableSlotsCount > 0;
 
-const renderEquipmentIcon = (item: string) => {
-  switch (item) {
-    case 'Projector':
-      return <Projector key={item} size={14} color="#475569" />;
-    case 'Smart TV':
-      return <Tv key={item} size={14} color="#475569" />;
-    case 'High-Speed LAN':
-      return <Wifi key={item} size={14} color="#475569" />;
-    case 'Air Conditioner':
-      return <Wind key={item} size={14} color="#475569" />;
-    default:
-      return null;
-  }
-};
+  // Lấy nhãn thiết bị hiển thị tóm tắt (tối đa 2 món)
+  const equipmentSummary = room.equipments
+    .slice(0, 2)
+    .map(eq => {
+      const found = EQUIPMENT_LIST.find(item => item.id === eq);
+      return found ? found.label.split('/')[0].trim() : eq;
+    })
+    .join(' • ');
 
-export const RoomCard: React.FC<RoomCardProps> = React.memo(
-  ({ room, onPress }) => {
-    const buildingTheme = getBuildingTheme(room.building);
+  const typeLabels: Record<string, string> = {
+    STUDY: 'Tự học',
+    LAB: 'Phòng Lab',
+    MEETING: 'Thảo luận',
+    WORKSHOP: 'Workshop',
+  };
 
-    return (
-      <TouchableOpacity
-        style={styles.cardContainer}
-        onPress={() => onPress(room.id)}
-        activeOpacity={0.88}
-      >
-        {/* Room Photo */}
-        <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: room.image }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-          {/* Building Badge overlay */}
+  return (
+    <TouchableOpacity activeOpacity={0.85} style={styles.card} onPress={onPress}>
+      <View style={styles.imageContainer}>
+        <Image source={{ uri: room.imageUrl }} style={styles.image} resizeMode="cover" />
+        <View style={styles.typeBadge}>
+          <Text style={styles.typeText}>{typeLabels[room.type] || room.type}</Text>
+        </View>
+        <View style={styles.capacityBadge}>
+          <Text style={styles.capacityText}>{room.capacity} chỗ</Text>
+        </View>
+      </View>
+
+      <View style={styles.body}>
+        <View style={styles.headerRow}>
+          <View style={styles.codeBadge}>
+            <Text style={styles.codeText}>{room.code}</Text>
+          </View>
           <View
             style={[
-              styles.buildingBadge,
-              {
-                backgroundColor: buildingTheme.bg,
-                borderColor: buildingTheme.border,
-              },
+              styles.statusPill,
+              { backgroundColor: isAvailable ? COLORS.successSoft : COLORS.dangerSoft },
             ]}
           >
-            <Building2 size={12} color={buildingTheme.text} />
-            <Text style={[styles.buildingText, { color: buildingTheme.text }]}>
-              Tòa {room.building} • Tầng {room.floor}
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isAvailable ? COLORS.success : COLORS.danger },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusPillText,
+                { color: isAvailable ? COLORS.success : COLORS.danger },
+              ]}
+            >
+              {isAvailable ? `Còn ${availableSlotsCount} ca trống` : 'Đã kín lịch'}
             </Text>
           </View>
-
-          {/* Status Badge */}
-          <View style={styles.statusBadge}>
-            <CheckCircle2 size={12} color="#10B981" />
-            <Text style={styles.statusText}>Sẵn sàng</Text>
-          </View>
         </View>
 
-        {/* Card Body Info */}
-        <View style={styles.content}>
-          <View style={styles.headerRow}>
-            <View style={styles.codeContainer}>
-              <Text style={styles.roomCode}>{room.code}</Text>
-              <Text style={styles.roomName} numberOfLines={1}>
-                {room.name}
-              </Text>
-            </View>
-            <ChevronRight size={20} color="#94A3B8" />
-          </View>
+        <Text style={styles.name} numberOfLines={1}>
+          {room.name}
+        </Text>
 
-          <Text style={styles.description} numberOfLines={2}>
-            {room.description}
+        <Text style={styles.locationText}>
+          📍 {room.building} • Tầng {room.floor}
+        </Text>
+
+        {equipmentSummary ? (
+          <Text style={styles.equipmentText} numberOfLines={1}>
+            ⚡ {equipmentSummary}
+            {room.equipments.length > 2 ? ` +${room.equipments.length - 2}` : ''}
           </Text>
-
-          {/* Stats Bar */}
-          <View style={styles.footerRow}>
-            <View style={styles.specItem}>
-              <Users size={15} color="#2563EB" />
-              <Text style={styles.specText}>{room.capacity} Chỗ ngồi</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.specItem}>
-              <Layers size={15} color="#64748B" />
-              <Text style={styles.specText}>Phòng {room.code}</Text>
-            </View>
-
-            <View style={styles.equipmentIcons}>
-              {room.equipment.slice(0, 3).map((eq) => (
-                <View key={eq} style={styles.iconCircle}>
-                  {renderEquipmentIcon(eq)}
-                </View>
-              ))}
-              {room.equipment.length > 3 && (
-                <Text style={styles.moreEquip}>+{room.equipment.length - 3}</Text>
-              )}
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  },
-  (prev, next) => prev.room.id === next.room.id && prev.room.status === next.room.status
-);
-
-export const ROOM_CARD_HEIGHT = 295; // Used for FlatList getItemLayout optimization
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const styles = StyleSheet.create({
-  cardContainer: {
-    backgroundColor: '#FFFFFF',
+  card: {
+    backgroundColor: COLORS.card,
     borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
     overflow: 'hidden',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: COLORS.border,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  imageWrapper: {
+  imageContainer: {
+    height: 140,
     width: '100%',
-    height: 155,
     position: 'relative',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: COLORS.divider,
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  buildingBadge: {
+  typeBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  buildingText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  statusBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 9,
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
   },
-  statusText: {
+  typeText: {
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
-    color: '#065F46',
   },
-  content: {
+  capacityBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(29, 78, 216, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  capacityText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  body: {
     padding: 14,
   },
   headerRow: {
@@ -212,72 +155,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  codeContainer: {
-    flex: 1,
-    marginRight: 8,
+  codeBadge: {
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  roomCode: {
+  codeText: {
+    color: COLORS.primary,
+    fontWeight: '700',
     fontSize: 12,
-    fontWeight: '800',
-    color: '#2563EB',
-    textTransform: 'uppercase',
   },
-  roomName: {
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  name: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 1,
+    color: COLORS.text,
+    marginBottom: 4,
   },
-  description: {
+  locationText: {
     fontSize: 13,
-    color: '#64748B',
-    lineHeight: 18,
-    marginBottom: 12,
+    color: COLORS.textMuted,
+    marginBottom: 4,
   },
-  footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F8FAFC',
-    paddingTop: 10,
-  },
-  specItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  specText: {
+  equipmentText: {
     fontSize: 12,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  divider: {
-    width: 1,
-    height: 14,
-    backgroundColor: '#E2E8F0',
-    marginHorizontal: 10,
-  },
-  equipmentIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto',
-    gap: 6,
-  },
-  iconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  moreEquip: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-    marginLeft: 2,
+    color: COLORS.textSubtle,
   },
 });
-

@@ -1,16 +1,10 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
-import { generateNext7Days, DayOption } from '../utils/dateUtils';
-import { Calendar } from 'lucide-react-native';
+import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { getUpcomingDates } from '../utils/dateHelpers';
+import { COLORS } from '../constants/colors';
 
 interface DateSelectorProps {
-  selectedDate: string; // YYYY-MM-DD
+  selectedDate: string;
   onSelectDate: (date: string) => void;
 }
 
@@ -18,172 +12,79 @@ export const DateSelector: React.FC<DateSelectorProps> = ({
   selectedDate,
   onSelectDate,
 }) => {
-  const next7Days = React.useMemo(() => generateNext7Days(), []);
+  const dates = getUpcomingDates(7);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleGroup}>
-          <Calendar size={18} color="#2563EB" />
-          <Text style={styles.title}>Chọn ngày đặt phòng</Text>
-        </View>
-        <Text style={styles.subtitle}>7 ngày tới</Text>
-      </View>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.container}
+    >
+      {dates.map(item => {
+        const isSelected = item.fullDate === selectedDate;
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {next7Days.map((item: DayOption) => {
-          const isSelected = item.dateString === selectedDate;
-          return (
-            <TouchableOpacity
-              key={item.dateString}
-              onPress={() => onSelectDate(item.dateString)}
-              activeOpacity={0.75}
-              style={[
-                styles.dayCard,
-                isSelected && styles.dayCardSelected,
-                item.isToday && !isSelected && styles.dayCardToday,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.dayName,
-                  isSelected && styles.dayNameSelected,
-                  item.isToday && !isSelected && styles.dayNameToday,
-                ]}
-              >
-                {item.dayName}
-              </Text>
-              <Text
-                style={[
-                  styles.dayNumber,
-                  isSelected && styles.dayNumberSelected,
-                ]}
-              >
-                {item.dayNumber}
-              </Text>
-              <Text
-                style={[
-                  styles.monthText,
-                  isSelected && styles.monthTextSelected,
-                ]}
-              >
-                Tháng {item.monthNumber}
-              </Text>
-
-              {item.isToday && (
-                <View
-                  style={[
-                    styles.todayDot,
-                    isSelected && styles.todayDotSelected,
-                  ]}
-                />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
+        return (
+          <TouchableOpacity
+            key={item.fullDate}
+            activeOpacity={0.7}
+            onPress={() => onSelectDate(item.fullDate)}
+            style={[styles.dateCard, isSelected && styles.dateCardSelected]}
+          >
+            <Text style={[styles.dayOfWeek, isSelected && styles.textSelected]}>
+              {item.dayOfWeek}
+            </Text>
+            <Text style={[styles.dayOfMonth, isSelected && styles.textSelected]}>
+              {item.dayOfMonth}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  titleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  scrollContent: {
     paddingHorizontal: 16,
-    gap: 10,
+    paddingVertical: 10,
   },
-  dayCard: {
+  dateCard: {
     width: 68,
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
+    height: 72,
+    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    position: 'relative',
+    alignItems: 'center',
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  dayCardToday: {
-    borderColor: '#93C5FD',
-    backgroundColor: '#EFF6FF',
-  },
-  dayCardSelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#1D4ED8',
-    shadowColor: '#2563EB',
+  dateCardSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 3,
   },
-  dayName: {
+  dayOfWeek: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
+    fontWeight: '500',
+    color: COLORS.textMuted,
     marginBottom: 4,
   },
-  dayNameToday: {
-    color: '#2563EB',
+  dayOfMonth: {
+    fontSize: 15,
     fontWeight: '700',
+    color: COLORS.text,
   },
-  dayNameSelected: {
-    color: '#DBEAFE',
-  },
-  dayNumber: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  dayNumberSelected: {
+  textSelected: {
     color: '#FFFFFF',
   },
-  monthText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  monthTextSelected: {
-    color: '#BFDBFE',
-  },
-  todayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#2563EB',
-    position: 'absolute',
-    bottom: 6,
-  },
-  todayDotSelected: {
-    backgroundColor: '#FFFFFF',
-  },
 });
-

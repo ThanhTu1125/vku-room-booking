@@ -1,80 +1,54 @@
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, Booking } from '../types';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBookingStore } from '../store/useBookingStore';
-import { BookingPassModal } from '../components/BookingPassModal';
-import { formatDisplayDate } from '../utils/dateUtils';
-import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  MapPin,
-  QrCode,
-  AlertTriangle,
-  Inbox,
-  CheckCircle2,
-  XCircle,
-} from 'lucide-react-native';
+import { Booking, Room } from '../types';
+import { QRModal } from '../components/QRModal';
+import { formatDisplayDate } from '../utils/dateHelpers';
+import { COLORS } from '../constants/colors';
 
-type MyBookingsScreenProps = NativeStackScreenProps<
-  RootStackParamList,
-  'MyBookings'
->;
+type BookingTab = 'UPCOMING' | 'HISTORY';
 
-export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
-  navigation,
-}) => {
-  const bookings = useBookingStore((state) => state.bookings);
-  const user = useBookingStore((state) => state.userSession);
-  const cancelBooking = useBookingStore((state) => state.cancelBooking);
+export const MyBookingsScreen: React.FC = () => {
+  const bookings = useBookingStore(state => state.bookings);
+  const rooms = useBookingStore(state => state.rooms);
+  const cancelBooking = useBookingStore(state => state.cancelBooking);
+  const checkInBooking = useBookingStore(state => state.checkInBooking);
 
-  // Selected tab: upcoming or history
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [activeTab, setActiveTab] = useState<BookingTab>('UPCOMING');
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [showQRModal, setShowQRModal] = useState<boolean>(false);
 
-  // Modal pass preview
-  const [selectedPass, setSelectedPass] = useState<Booking | null>(null);
-  const [passModalVisible, setPassModalVisible] = useState<boolean>(false);
-
-  // Filter student's bookings
-  const userBookings = useMemo(
-    () => bookings.filter((b) => b.userId === user.id),
-    [bookings, user.id]
+  const upcomingBookings = bookings.filter(
+    b => b.status === 'CONFIRMED' || b.status === 'CHECKED_IN'
   );
 
-  const displayedBookings = useMemo(() => {
-    if (activeTab === 'upcoming') {
-      return userBookings.filter((b) => b.status === 'confirmed');
-    }
-    return userBookings.filter((b) => b.status !== 'confirmed');
-  }, [userBookings, activeTab]);
+  const historyBookings = bookings.filter(
+    b => b.status === 'CANCELLED' || b.status === 'EXPIRED'
+  );
 
-  const handleOpenPass = (booking: Booking) => {
-    setSelectedPass(booking);
-    setPassModalVisible(true);
+  const displayedBookings = activeTab === 'UPCOMING' ? upcomingBookings : historyBookings;
+
+  const handleOpenQR = (booking: Booking) => {
+    const room = rooms.find(r => r.id === booking.roomId) || null;
+    setSelectedBooking(booking);
+    setSelectedRoom(room);
+    setShowQRModal(true);
   };
 
-  const handleCancel = (booking: Booking) => {
+  const handleCancelBooking = (booking: Booking) => {
     Alert.alert(
-      'Hủy lịch đặt phòng',
-      `Bạn có chắc muốn hủy lịch tại ${booking.roomName} (${booking.timeSlot.label})?`,
+      'Xác nhận hủy đặt phòng',
+      `Bạn có chắc chắn muốn hủy ca học ${booking.timeSlot.label} vào ngày ${booking.date}?`,
       [
-        { text: 'Giữ lại', style: 'cancel' },
+        { text: 'Không', style: 'cancel' },
         {
           text: 'Hủy lịch',
           style: 'destructive',
           onPress: async () => {
-            const res = await cancelBooking(booking.id);
-            if (res.success) {
-              Alert.alert('Thành công', 'Đã hủy lịch đặt phòng và giải phóng ca học.');
-            }
+            await cancelBooking(booking.id);
+            Alert.alert('Đã hủy', 'Lịch đặt phòng đã được hủy thành công.');
           },
         },
       ]
@@ -82,85 +56,80 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   };
 
   const renderBookingItem = ({ item }: { item: Booking }) => {
-    const isUpcoming = item.status === 'confirmed';
+    const room = rooms.find(r => r.id === item.roomId);
+    const isUpcoming = item.status === 'CONFIRMED';
+    const isCheckedIn = item.status === 'CHECKED_IN';
+    const isCancelled = item.status === 'CANCELLED';
+
+    let statusText = 'Đã xác nhận';
+    let statusColor: string = COLORS.primary;
+    let statusBg: string = COLORS.primarySoft;
+
+    if (isCheckedIn) {
+      statusText = 'Đã check-in';
+      statusColor = COLORS.success;
+      statusBg = COLORS.successSoft;
+    } else if (isCancelled) {
+      statusText = 'Đã hủy';
+      statusColor = COLORS.danger;
+      statusBg = COLORS.dangerSoft;
+    }
 
     return (
-      <View style={styles.bookingCard}>
-        {/* Top Card Header */}
+      <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <View style={styles.roomInfoCol}>
-            <Text style={styles.cardRoomName}>{item.roomName}</Text>
-            <View style={styles.locationTag}>
-              <MapPin size={13} color="#2563EB" />
-              <Text style={styles.locationTagText}>
-                Tòa {item.building} • Tầng {item.floor}
-              </Text>
-            </View>
+          <View style={styles.roomCodeBadge}>
+            <Text style={styles.roomCodeText}>{room?.code || 'PHÒNG'}</Text>
           </View>
-
-          {/* Status Badge */}
-          <View
-            style={[
-              styles.statusBadge,
-              isUpcoming ? styles.statusConfirmed : styles.statusCancelled,
-            ]}
-          >
-            {isUpcoming ? (
-              <>
-                <CheckCircle2 size={12} color="#059669" />
-                <Text style={styles.statusConfirmedText}>Đã xác nhận</Text>
-              </>
-            ) : (
-              <>
-                <XCircle size={12} color="#DC2626" />
-                <Text style={styles.statusCancelledText}>Đã hủy</Text>
-              </>
-            )}
+          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
           </View>
         </View>
 
-        {/* Date & Time Slot Block */}
-        <View style={styles.scheduleRow}>
-          <View style={styles.scheduleCol}>
-            <View style={styles.scheduleItem}>
-              <Calendar size={14} color="#64748B" />
-              <Text style={styles.scheduleText}>{formatDisplayDate(item.date)}</Text>
-            </View>
-            <View style={styles.scheduleItem}>
-              <Clock size={14} color="#2563EB" />
-              <Text style={[styles.scheduleText, styles.slotHighlight]}>
-                {item.timeSlot.label}
-              </Text>
-            </View>
-          </View>
+        <Text style={styles.roomName}>{room?.name || 'Phòng học VKU'}</Text>
+        <Text style={styles.locationText}>
+          📍 {room?.building} • Tầng {room?.floor}
+        </Text>
+
+        <View style={styles.divider} />
+
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>📅 Ngày:</Text>
+          <Text style={styles.detailValue}>{formatDisplayDate(item.date)}</Text>
         </View>
 
-        {/* Card Footer Actions */}
-        <View style={styles.cardFooter}>
-          {isUpcoming ? (
-            <>
-              <TouchableOpacity
-                style={styles.qrPassBtn}
-                onPress={() => handleOpenPass(item)}
-                activeOpacity={0.8}
-              >
-                <QrCode size={16} color="#FFFFFF" />
-                <Text style={styles.qrPassBtnText}>Mở thẻ QR Check-in</Text>
-              </TouchableOpacity>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>⏰ Ca học:</Text>
+          <Text style={styles.detailValue}>{item.timeSlot.label}</Text>
+        </View>
 
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => handleCancel(item)}
-                activeOpacity={0.7}
-              >
-                <AlertTriangle size={15} color="#EF4444" />
-                <Text style={styles.cancelBtnText}>Hủy lịch</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <Text style={styles.cancelledNote}>
-              Lịch đặt này đã bị hủy và khung giờ đã được hoàn lại.
+        {item.purpose ? (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>🎯 Mục đích:</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {item.purpose}
             </Text>
+          </View>
+        ) : null}
+
+        {/* Buttons */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={styles.qrBtn}
+            activeOpacity={0.8}
+            onPress={() => handleOpenQR(item)}
+          >
+            <Text style={styles.qrBtnText}>📱 Xem mã QR Pass</Text>
+          </TouchableOpacity>
+
+          {isUpcoming && (
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              activeOpacity={0.8}
+              onPress={() => handleCancelBooking(item)}
+            >
+              <Text style={styles.cancelBtnText}>Hủy lịch</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -168,50 +137,32 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
   };
 
   return (
-    <View style={styles.container}>
-      {/* Top Header */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <ArrowLeft size={20} color="#0F172A" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Lịch Đặt Phòng Của Tôi</Text>
-        <View style={{ width: 36 }} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* Screen Title */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Vé Đặt Phòng Của Tôi</Text>
+        <Text style={styles.subtitle}>Quản lý lịch học và mã QR check-in phòng học</Text>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsWrapper}>
+      {/* Segmented Control Tabs */}
+      <View style={styles.tabsContainer}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'upcoming' && styles.tabActive]}
-          onPress={() => setActiveTab('upcoming')}
-          activeOpacity={0.8}
+          style={[styles.tab, activeTab === 'UPCOMING' && styles.tabActive]}
+          onPress={() => setActiveTab('UPCOMING')}
         >
           <Text
-            style={[
-              styles.tabText,
-              activeTab === 'upcoming' && styles.tabTextActive,
-            ]}
+            style={[styles.tabText, activeTab === 'UPCOMING' && styles.tabTextActive]}
           >
-            Sắp tới ({userBookings.filter((b) => b.status === 'confirmed').length})
+            Sắp tới ({upcomingBookings.length})
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'history' && styles.tabActive]}
-          onPress={() => setActiveTab('history')}
-          activeOpacity={0.8}
+          style={[styles.tab, activeTab === 'HISTORY' && styles.tabActive]}
+          onPress={() => setActiveTab('HISTORY')}
         >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'history' && styles.tabTextActive,
-            ]}
-          >
-            Lịch sử ({userBookings.filter((b) => b.status !== 'confirmed').length})
+          <Text style={[styles.tabText, activeTab === 'HISTORY' && styles.tabTextActive]}>
+            Lịch sử ({historyBookings.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -219,272 +170,215 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
       {/* Bookings List */}
       <FlatList
         data={displayedBookings}
-        renderItem={renderBookingItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        renderItem={renderBookingItem}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Inbox size={48} color="#CBD5E1" />
+            <Text style={styles.emptyEmoji}>🎫</Text>
             <Text style={styles.emptyTitle}>
-              {activeTab === 'upcoming'
+              {activeTab === 'UPCOMING'
                 ? 'Bạn chưa có lịch đặt phòng nào sắp tới'
                 : 'Chưa có lịch sử đặt phòng nào'}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {activeTab === 'upcoming'
-                ? 'Tìm phòng học lý tưởng và đặt trước ca học 2 tiếng ngay bây giờ.'
-                : 'Các ca học đã hoàn thành hoặc hủy sẽ xuất hiện tại đây.'}
+              Khám phá danh sách phòng học tại VKU và đặt lịch cho nhóm của bạn.
             </Text>
-
-            {activeTab === 'upcoming' && (
-              <TouchableOpacity
-                style={styles.exploreBtn}
-                onPress={() => navigation.navigate('Home')}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.exploreBtnText}>Tìm phòng ngay</Text>
-              </TouchableOpacity>
-            )}
           </View>
         }
       />
 
       {/* QR Modal */}
-      <BookingPassModal
-        visible={passModalVisible}
-        booking={selectedPass}
-        onClose={() => setPassModalVisible(false)}
-        onCancelBooking={async (bookingId) => {
-          await cancelBooking(bookingId);
+      <QRModal
+        visible={showQRModal}
+        booking={selectedBooking}
+        room={selectedRoom}
+        onClose={() => setShowQRModal(false)}
+        onCheckIn={id => {
+          checkInBooking(id);
+          if (selectedBooking) {
+            setSelectedBooking({ ...selectedBooking, status: 'CHECKED_IN' });
+          }
+          Alert.alert('Thành công', 'Đã mô phỏng check-in phòng học!');
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
   },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
+  title: {
+    fontSize: 22,
     fontWeight: '800',
-    color: '#0F172A',
+    color: COLORS.primary,
   },
-  tabsWrapper: {
+  subtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   tab: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 10,
+    borderRadius: 8,
   },
   tabActive: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: COLORS.primary,
   },
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#64748B',
+    color: COLORS.textMuted,
   },
   tabTextActive: {
-    color: '#2563EB',
-    fontWeight: '700',
+    color: '#FFFFFF',
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: 16,
+    paddingBottom: 30,
   },
-  bookingCard: {
-    backgroundColor: '#FFFFFF',
+  card: {
+    backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 3 },
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  roomInfoCol: {
-    flex: 1,
-    marginRight: 8,
-  },
-  cardRoomName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  locationTag: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+    marginBottom: 6,
   },
-  locationTagText: {
+  roomCodeBadge: {
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  roomCodeText: {
+    color: COLORS.primary,
+    fontWeight: '700',
     fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  statusConfirmed: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  statusConfirmedText: {
+  statusText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#047857',
   },
-  statusCancelled: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  statusCancelledText: {
-    fontSize: 11,
+  roomName: {
+    fontSize: 17,
     fontWeight: '700',
-    color: '#DC2626',
+    color: COLORS.text,
+    marginBottom: 2,
   },
-  scheduleRow: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
+  locationText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 10,
   },
-  scheduleCol: {
-    gap: 6,
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.divider,
+    marginVertical: 8,
   },
-  scheduleItem: {
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 3,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
+  detailValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text,
+    maxWidth: '70%',
+    textAlign: 'right',
+  },
+  cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 12,
     gap: 8,
   },
-  scheduleText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  slotHighlight: {
-    color: '#2563EB',
-    fontWeight: '700',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 12,
-  },
-  qrPassBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+  qrBtn: {
+    flex: 1,
+    backgroundColor: COLORS.primarySoft,
+    paddingVertical: 10,
     borderRadius: 10,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    alignItems: 'center',
   },
-  qrPassBtnText: {
-    fontSize: 13,
+  qrBtnText: {
+    color: COLORS.primary,
     fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 13,
   },
   cancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.dangerSoft,
+    backgroundColor: COLORS.dangerSoft,
   },
   cancelBtnText: {
-    fontSize: 12.5,
+    color: COLORS.danger,
     fontWeight: '600',
-    color: '#EF4444',
-  },
-  cancelledNote: {
     fontSize: 12,
-    color: '#94A3B8',
-    fontStyle: 'italic',
   },
   emptyContainer: {
     alignItems: 'center',
-    padding: 40,
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#334155',
-    marginTop: 12,
+    color: COLORS.text,
+    marginBottom: 6,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 12.5,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  exploreBtn: {
-    marginTop: 18,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  exploreBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
     fontSize: 13,
+    color: COLORS.textMuted,
+    textAlign: 'center',
   },
 });
-

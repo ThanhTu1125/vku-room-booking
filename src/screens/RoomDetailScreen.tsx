@@ -1,554 +1,438 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  Image,
-  ScrollView,
-  TouchableOpacity,
   StyleSheet,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  TextInput,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, TimeSlot, Booking } from '../types';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RootStackParamList } from '../navigation/types';
 import { useBookingStore } from '../store/useBookingStore';
+import { TIME_SLOTS } from '../constants/timeSlots';
+import { EQUIPMENT_LIST } from '../constants/equipment';
+import { TimeSlot, Booking } from '../types';
+import { TimeSlotButton } from '../components/TimeSlotButton';
 import { DateSelector } from '../components/DateSelector';
-import { TimeSlotPicker } from '../components/TimeSlotPicker';
-import { BookingPassModal } from '../components/BookingPassModal';
-import { formatDisplayDate } from '../utils/dateUtils';
-import {
-  ArrowLeft,
-  Users,
-  Building2,
-  Layers,
-  CheckCircle2,
-  Sun,
-  Wifi,
-  Tv,
-  Projector,
-  Wind,
-  Volume2,
-  Zap,
-  Mic,
-  CalendarCheck,
-  ShieldAlert,
-} from 'lucide-react-native';
+import { QRModal } from '../components/QRModal';
+import { getSlotAvailability } from '../utils/conflictChecker';
+import { formatDisplayDate } from '../utils/dateHelpers';
+import { COLORS } from '../constants/colors';
 
-type RoomDetailScreenProps = NativeStackScreenProps<
-  RootStackParamList,
-  'RoomDetail'
->;
+type RouteProps = RouteProp<RootStackParamList, 'RoomDetail'>;
 
-const getEquipmentIcon = (name: string) => {
-  switch (name) {
-    case 'Projector':
-      return <Projector size={16} color="#2563EB" />;
-    case 'Smart TV':
-      return <Tv size={16} color="#2563EB" />;
-    case 'High-Speed LAN':
-      return <Wifi size={16} color="#2563EB" />;
-    case 'Air Conditioner':
-      return <Wind size={16} color="#2563EB" />;
-    case 'Sound System':
-      return <Volume2 size={16} color="#2563EB" />;
-    case 'Power Outlets':
-      return <Zap size={16} color="#2563EB" />;
-    case 'Conference Mic':
-      return <Mic size={16} color="#2563EB" />;
-    default:
-      return <CheckCircle2 size={16} color="#2563EB" />;
-  }
-};
+export const RoomDetailScreen: React.FC = () => {
+  const route = useRoute<RouteProps>();
+  const navigation = useNavigation();
+  const { roomId, initialDate } = route.params;
 
-export const RoomDetailScreen: React.FC<RoomDetailScreenProps> = ({
-  route,
-  navigation,
-}) => {
-  const { roomId } = route.params;
+  const room = useBookingStore(state => state.getRoomById(roomId));
+  const bookings = useBookingStore(state => state.bookings);
+  const createBooking = useBookingStore(state => state.createBooking);
+  const checkInBooking = useBookingStore(state => state.checkInBooking);
 
-  // Store access
-  const room = useBookingStore((state) => state.getRoomById(roomId));
-  const bookRoom = useBookingStore((state) => state.bookRoom);
-  const cancelBooking = useBookingStore((state) => state.cancelBooking);
-  const isSlotBooked = useBookingStore((state) => state.isSlotBooked);
-
-  // Local interaction state
-  const todayString = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const [selectedDate, setSelectedDate] = useState<string>(todayString);
+  const [currentDate, setCurrentDate] = useState<string>(
+    initialDate || new Date().toISOString().split('T')[0]
+  );
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [purpose, setPurpose] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Pass Modal state
-  const [passModalVisible, setPassModalVisible] = useState<boolean>(false);
-  const [currentBooking, setCurrentBooking] = useState<Booking | null>(null);
+  // Modal QR Code sau khi đặt thành công
+  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
+  const [showQRModal, setShowQRModal] = useState<boolean>(false);
 
   if (!room) {
     return (
-      <View style={styles.notFoundContainer}>
-        <Text style={styles.notFoundText}>Không tìm thấy phòng học.</Text>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backBtnText}>Quay lại danh sách</Text>
+      <SafeAreaView style={styles.notFoundContainer}>
+        <Text style={styles.notFoundText}>Không tìm thấy thông tin phòng học.</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtnText}>Quay lại</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  const handleDateChange = (newDate: string) => {
-    setSelectedDate(newDate);
-    // If selected slot is already booked on the newly selected date, reset selection
-    if (selectedSlot && isSlotBooked(room.id, newDate, selectedSlot.startTime)) {
-      setSelectedSlot(null);
-    }
-  };
-
-  const handleBookingConfirm = async () => {
+  const handleBookRoom = async () => {
     if (!selectedSlot) {
-      Alert.alert('Chưa chọn khung giờ', 'Vui lòng chọn 1 khung giờ học 2 tiếng khả dụng.');
+      Alert.alert('Chưa chọn ca học', 'Vui lòng chọn một ca học còn trống để tiếp tục.');
       return;
     }
 
-    // Atomic conflict verification
-    if (isSlotBooked(room.id, selectedDate, selectedSlot.startTime)) {
+    if (!purpose.trim()) {
       Alert.alert(
-        'Khung giờ đã bị trùng!',
-        `Khung giờ ${selectedSlot.label} vào ngày này vừa được người khác đặt. Vui lòng chọn ca học khác.`
+        'Nhập mục đích sử dụng',
+        'Vui lòng nhập ngắn gọn lý do mượn phòng (VD: Ôn thi, làm đồ án...)'
       );
-      setSelectedSlot(null);
       return;
     }
 
     setIsSubmitting(true);
+    const result = await createBooking({
+      roomId: room.id,
+      date: currentDate,
+      timeSlot: selectedSlot,
+      purpose,
+    });
+    setIsSubmitting(false);
 
-    try {
-      const result = await bookRoom(room.id, selectedDate, selectedSlot);
-
-      if (result.success && result.booking) {
-        setCurrentBooking(result.booking);
-        setPassModalVisible(true);
-        setSelectedSlot(null); // Reset selection
-      } else {
-        Alert.alert('Lỗi đặt phòng', result.error || 'Có lỗi xảy ra, vui lòng thử lại.');
-      }
-    } catch (err: any) {
-      Alert.alert('Lỗi hệ thống', err.message || 'Không thể hoàn tất đặt phòng.');
-    } finally {
-      setIsSubmitting(false);
+    if (result.success && result.booking) {
+      setCreatedBooking(result.booking);
+      setShowQRModal(true);
+      setSelectedSlot(null);
+      setPurpose('');
+    } else {
+      Alert.alert('Không thể đặt phòng', result.error || 'Đã xảy ra lỗi trùng lịch.');
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Scrollable Content */}
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      {/* Top Bar with Back Button */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.circleBackBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.circleBackBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle} numberOfLines={1}>
+          {room.code} - {room.name}
+        </Text>
+        <View style={{ width: 36 }} />
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Room Hero Image */}
-        <View style={styles.heroImageContainer}>
-          <Image source={{ uri: room.image }} style={styles.heroImage} />
+        {/* Banner Image */}
+        <View style={styles.bannerContainer}>
+          <Image
+            source={{ uri: room.imageUrl }}
+            style={styles.bannerImage}
+            resizeMode="cover"
+          />
+          <View style={styles.bannerOverlay}>
+            <View style={styles.codeTag}>
+              <Text style={styles.codeTagText}>{room.code}</Text>
+            </View>
+            <View style={styles.capacityTag}>
+              <Text style={styles.capacityTagText}>Sức chứa: {room.capacity} người</Text>
+            </View>
+          </View>
+        </View>
 
-          {/* Top floating back button */}
-          <TouchableOpacity
-            style={styles.floatingBackBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <ArrowLeft size={20} color="#0F172A" />
-          </TouchableOpacity>
+        {/* Room Info */}
+        <View style={styles.infoCard}>
+          <Text style={styles.roomName}>{room.name}</Text>
+          <Text style={styles.roomLocation}>
+            📍 Tòa nhà {room.building} • Tầng {room.floor}
+          </Text>
+          <Text style={styles.roomDescription}>{room.description}</Text>
 
-          {/* Floating Building pill */}
-          <View style={styles.buildingTag}>
-            <Building2 size={13} color="#FFFFFF" />
-            <Text style={styles.buildingTagText}>
-              Tòa {room.building} • Tầng {room.floor}
+          {/* Equipment List */}
+          <Text style={styles.sectionHeader}>Trang thiết bị sẵn có</Text>
+          <View style={styles.equipmentWrap}>
+            {room.equipments.map(eq => {
+              const item = EQUIPMENT_LIST.find(e => e.id === eq);
+              return (
+                <View key={eq} style={styles.equipmentBadge}>
+                  <Text style={styles.equipmentBadgeText}>
+                    ✓ {item ? item.label : eq}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Date Selector for slots */}
+        <View style={styles.bookingCard}>
+          <Text style={styles.sectionHeader}>Chọn ngày muốn mượn phòng</Text>
+          <DateSelector
+            selectedDate={currentDate}
+            onSelectDate={date => {
+              setCurrentDate(date);
+              setSelectedSlot(null);
+            }}
+          />
+
+          <View style={styles.selectedDateInfo}>
+            <Text style={styles.selectedDateText}>
+              Lịch các ca trong ngày: {formatDisplayDate(currentDate)}
             </Text>
           </View>
-        </View>
 
-        {/* Room Header Info */}
-        <View style={styles.roomHeaderSection}>
-          <View style={styles.roomTitleRow}>
-            <View style={styles.codeBadge}>
-              <Text style={styles.codeBadgeText}>{room.code}</Text>
-            </View>
-            <View style={styles.roomTitleCol}>
-              <Text style={styles.roomNameText}>{room.name}</Text>
-              <Text style={styles.campusSubtitle}>
-                Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU)
-              </Text>
-            </View>
+          {/* Time Slots List */}
+          <View style={styles.slotsContainer}>
+            {TIME_SLOTS.map(slot => {
+              const status = getSlotAvailability(room, currentDate, slot, bookings);
+              const isSelected = selectedSlot?.id === slot.id;
+
+              return (
+                <TimeSlotButton
+                  key={slot.id}
+                  slot={slot}
+                  status={status}
+                  isSelected={isSelected}
+                  onPress={() => setSelectedSlot(slot)}
+                />
+              );
+            })}
           </View>
 
-          <Text style={styles.descriptionText}>{room.description}</Text>
-
-          {/* Spec Cards Row */}
-          <View style={styles.specCardsRow}>
-            <View style={styles.specCard}>
-              <Users size={20} color="#2563EB" />
-              <Text style={styles.specValue}>{room.capacity} Người</Text>
-              <Text style={styles.specLabel}>Sức chứa tối đa</Text>
-            </View>
-
-            <View style={styles.specCard}>
-              <Layers size={20} color="#059669" />
-              <Text style={styles.specValue}>Tầng {room.floor}</Text>
-              <Text style={styles.specLabel}>Vị trí tầng</Text>
-            </View>
-
-            <View style={styles.specCard}>
-              <Sun size={20} color="#D97706" />
-              <Text style={styles.specValue}>{room.lightingType || 'Tự nhiên'}</Text>
-              <Text style={styles.specLabel}>Ánh sáng</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Equipment Badges Section */}
-        <View style={styles.sectionBlock}>
-          <Text style={styles.blockTitle}>Trang thiết bị & Tiện nghi</Text>
-          <View style={styles.equipmentGrid}>
-            {room.equipment.map((item) => (
-              <View key={item} style={styles.equipmentItem}>
-                <View style={styles.equipIconBox}>{getEquipmentIcon(item)}</View>
-                <Text style={styles.equipText}>{item}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* 7-Day Interactive Date Selector */}
-        <View style={styles.sectionBlock}>
-          <DateSelector
-            selectedDate={selectedDate}
-            onSelectDate={handleDateChange}
-          />
-        </View>
-
-        {/* Discrete 2-Hour Time Slots with conflict lock */}
-        <View style={styles.sectionBlock}>
-          <TimeSlotPicker
-            roomId={room.id}
-            selectedDate={selectedDate}
-            selectedSlot={selectedSlot}
-            onSelectSlot={setSelectedSlot}
-          />
-        </View>
-
-        {/* Conflict Notice Info Box */}
-        <View style={styles.noticeBox}>
-          <ShieldAlert size={18} color="#2563EB" />
-          <Text style={styles.noticeText}>
-            Hệ thống áp dụng cơ chế tự động chống xung đột lịch (Conflict Prevention).
-            Mỗi phiên học cố định 2 giờ và yêu cầu quét QR check-in đúng giờ.
+          {/* Purpose Input */}
+          <Text style={[styles.sectionHeader, { marginTop: 12 }]}>
+            Mục đích mượn phòng
           </Text>
+          <TextInput
+            placeholder="VD: Họp nhóm đồ án Lập trình Di động..."
+            placeholderTextColor={COLORS.textSubtle}
+            style={styles.purposeInput}
+            value={purpose}
+            onChangeText={setPurpose}
+            multiline
+            numberOfLines={2}
+          />
+
+          {/* Submit Booking Button */}
+          <TouchableOpacity
+            style={[
+              styles.submitBtn,
+              (!selectedSlot || isSubmitting) && styles.submitBtnDisabled,
+            ]}
+            disabled={!selectedSlot || isSubmitting}
+            activeOpacity={0.8}
+            onPress={handleBookRoom}
+          >
+            <Text style={styles.submitBtnText}>
+              {isSubmitting
+                ? 'Đang xử lý...'
+                : selectedSlot
+                  ? `Xác nhận đặt: ${selectedSlot.label.split('(')[0]}`
+                  : 'Vui lòng chọn ca học còn trống'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Bottom Booking Action Bar */}
-      <View style={styles.bottomBar}>
-        <View style={styles.summaryCol}>
-          <Text style={styles.summaryDateLabel}>
-            {formatDisplayDate(selectedDate)}
-          </Text>
-          <Text style={styles.summarySlotValue}>
-            {selectedSlot ? selectedSlot.label : 'Chưa chọn ca học'}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.confirmBookingBtn,
-            (!selectedSlot || isSubmitting) && styles.confirmBookingBtnDisabled,
-          ]}
-          disabled={!selectedSlot || isSubmitting}
-          onPress={handleBookingConfirm}
-          activeOpacity={0.85}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <CalendarCheck size={18} color="#FFFFFF" />
-              <Text style={styles.confirmBtnText}>Xác nhận đặt</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Booking Pass Modal */}
-      <BookingPassModal
-        visible={passModalVisible}
-        booking={currentBooking}
-        onClose={() => {
-          setPassModalVisible(false);
-          navigation.navigate('MyBookings');
-        }}
-        onCancelBooking={async (bookingId) => {
-          await cancelBooking(bookingId);
+      {/* QR Ticket Modal */}
+      <QRModal
+        visible={showQRModal}
+        booking={createdBooking}
+        room={room}
+        onClose={() => setShowQRModal(false)}
+        onCheckIn={id => {
+          checkInBooking(id);
+          if (createdBooking) {
+            setCreatedBooking({ ...createdBooking, status: 'CHECKED_IN' });
+          }
+          Alert.alert('Thành công', 'Đã check-in vào phòng học thành công!');
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  circleBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  circleBackBtnText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  topBarTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    maxWidth: '70%',
   },
   scrollContent: {
-    paddingBottom: 110,
+    paddingBottom: 40,
   },
-  heroImageContainer: {
+  bannerContainer: {
     width: '100%',
-    height: 240,
+    height: 200,
     position: 'relative',
-    backgroundColor: '#CBD5E1',
   },
-  heroImage: {
+  bannerImage: {
     width: '100%',
     height: '100%',
   },
-  floatingBackBtn: {
+  bannerOverlay: {
     position: 'absolute',
-    top: 24,
+    bottom: 12,
     left: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  buildingTag: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
+    right: 16,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 6,
+  },
+  codeTag: {
     backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
-  buildingTagText: {
+  codeTagText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  capacityTag: {
+    backgroundColor: 'rgba(29, 78, 216, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  capacityTagText: {
+    color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 12,
   },
-  roomHeaderSection: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    backgroundColor: '#FFFFFF',
+  infoCard: {
+    backgroundColor: COLORS.card,
+    padding: 16,
+    marginBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: COLORS.border,
   },
-  roomTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  roomName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 6,
+  },
+  roomLocation: {
+    fontSize: 14,
+    color: COLORS.textMuted,
     marginBottom: 10,
   },
-  codeBadge: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  codeBadgeText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1D4ED8',
-  },
-  roomTitleCol: {
-    flex: 1,
-  },
-  roomNameText: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  campusSubtitle: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  descriptionText: {
-    fontSize: 13.5,
-    color: '#475569',
+  roomDescription: {
+    fontSize: 14,
+    color: COLORS.textMuted,
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  specCardsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingBottom: 18,
-  },
-  specCard: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  specValue: {
-    fontSize: 13,
+  sectionHeader: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 6,
+    color: COLORS.text,
+    marginBottom: 8,
   },
-  specLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  sectionBlock: {
-    marginTop: 8,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  blockTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  equipmentGrid: {
+  equipmentWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    paddingHorizontal: 20,
   },
-  equipmentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F8FAFC',
+  equipmentBadge: {
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  equipmentBadgeText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  bookingCard: {
+    backgroundColor: COLORS.card,
+    padding: 16,
+    marginHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  selectedDateInfo: {
+    backgroundColor: COLORS.background,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    marginVertical: 10,
   },
-  equipIconBox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  equipText: {
-    fontSize: 12.5,
+  selectedDateText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#334155',
+    color: COLORS.primary,
   },
-  noticeBox: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: '#EFF6FF',
-    padding: 14,
+  slotsContainer: {
+    marginTop: 6,
+  },
+  purposeInput: {
+    backgroundColor: COLORS.background,
     borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    alignItems: 'flex-start',
+    borderColor: COLORS.border,
+    fontSize: 14,
+    color: COLORS.text,
+    marginBottom: 16,
   },
-  noticeText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#1E40AF',
-    lineHeight: 17,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+  submitBtn: {
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  summaryCol: {
-    flex: 1,
-  },
-  summaryDateLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  summarySlotValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 2,
-  },
-  confirmBookingBtn: {
-    flexDirection: 'row',
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#2563EB',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 4,
   },
-  confirmBookingBtnDisabled: {
-    backgroundColor: '#94A3B8',
+  submitBtnDisabled: {
+    backgroundColor: COLORS.disabled,
     shadowOpacity: 0,
     elevation: 0,
   },
-  confirmBtnText: {
+  submitBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   notFoundContainer: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    alignItems: 'center',
   },
   notFoundText: {
     fontSize: 16,
-    color: '#64748B',
-    marginBottom: 16,
+    color: COLORS.textMuted,
+    marginBottom: 12,
   },
   backBtn: {
-    backgroundColor: '#2563EB',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
     borderRadius: 8,
   },
   backBtnText: {
@@ -556,4 +440,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

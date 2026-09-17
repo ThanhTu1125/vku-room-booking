@@ -1,9 +1,8 @@
 import { Platform } from 'react-native';
 import { Booking, Room } from '../types';
-import { get15MinutesBeforeSlot } from './dateUtils';
+import { get15MinutesBeforeSlot } from './dateHelpers';
 
-// Modular imports từ expo-notifications/build để tránh nạp DevicePushTokenAutoRegistration.fx
-// Điều này ngăn chặn triệt để lỗi "Android Push notifications was removed from Expo Go with the release of SDK 53"
+// Modular imports từ expo-notifications
 import { setNotificationHandler } from 'expo-notifications/build/NotificationsHandler';
 import {
   getPermissionsAsync,
@@ -19,18 +18,8 @@ import {
 import { AndroidImportance } from 'expo-notifications/build/NotificationChannelManager.types';
 
 /**
- * ======================================================================================
- * 🛡️ GIẢI PHÁP CHỐNG CRASH CHO EXPO GO (SDK 53 - 57+):
- * ======================================================================================
- * - Bằng cách import trực tiếp các module con phục vụ Local Notifications thay vì import
- *   từ gốc 'expo-notifications', Metro Bundler sẽ KHÔNG nạp file side-effect
- *   'DevicePushTokenAutoRegistration.fx' và không gọi 'addPushTokenListener'.
- * - Nhờ đó, hàm 'warnOfExpoGoPushUsage' không bị kích hoạt -> Không bao giờ bị crash
- *   màn hình đỏ khi khởi động ứng dụng trên Expo Go Android!
- * ======================================================================================
+ * 1. Cấu hình hành vi hiển thị thông báo khi ứng dụng đang mở (Foreground)
  */
-
-// 1. Cấu hình hành vi hiển thị thông báo khi ứng dụng đang mở (Foreground)
 setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -43,7 +32,7 @@ setNotificationHandler({
 });
 
 /**
- * 2. Xin quyền hiển thị thông báo cục bộ và thiết lập Android Channel
+ * 2. Yêu cầu cấp quyền thông báo cục bộ và thiết lập Android Channel
  */
 export const requestNotificationPermissions = async (): Promise<boolean> => {
   try {
@@ -55,14 +44,13 @@ export const requestNotificationPermissions = async (): Promise<boolean> => {
       finalStatus = status;
     }
 
-    // Cấu hình Android Notification Channel với mức ưu tiên cao cho Android 8.0+
     if (Platform.OS === 'android') {
       await setNotificationChannelAsync('study-room-alerts', {
         name: 'Nhắc nhở Đặt phòng học VKU',
         description: 'Kênh thông báo nhắc trước 15 phút cho lịch đặt phòng học VKU',
         importance: AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#2563EB',
+        lightColor: '#1D4ED8',
         sound: 'default',
         enableVibrate: true,
         showBadge: true,
@@ -112,7 +100,6 @@ export const scheduleBookingReminder = async (
           channelId: Platform.OS === 'android' ? 'study-room-alerts' : undefined,
         },
       });
-      console.log(`Đã lên lịch thông báo thành công cho vé ${booking.id} lúc ${triggerDate.toLocaleString()}`);
       return notificationId;
     } else {
       // Trường hợp 2: Ca học sắp bắt đầu (dưới 15 phút) -> Kích hoạt thông báo tức thì sau 3 giây
@@ -140,7 +127,9 @@ export const scheduleBookingReminder = async (
 /**
  * 4. Hủy thông báo đã lập lịch khi sinh viên hủy lịch đặt phòng
  */
-export const cancelScheduledNotification = async (notificationId?: string): Promise<void> => {
+export const cancelScheduledNotification = async (
+  notificationId?: string
+): Promise<void> => {
   if (!notificationId) return;
   try {
     await cancelScheduledNotificationAsync(notificationId);

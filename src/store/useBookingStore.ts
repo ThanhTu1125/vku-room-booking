@@ -1,267 +1,172 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Booking, Room, TimeSlot, User } from '../types';
+import { MOCK_ROOMS } from '../data/rooms';
+import { MOCK_BOOKINGS } from '../data/bookings';
+import { generateBookingId, generateQrPayload } from '../utils/idGenerator';
+import { isSlotBooked, hasUserConflict } from '../utils/conflictChecker';
 import {
-  Room,
-  TimeSlot,
-  Booking,
-  UserSession,
-  FilterState,
-  EquipmentType,
-  BuildingCode,
-} from '../types';
-import { CURRENT_USER, INITIAL_ROOMS, INITIAL_BOOKINGS } from '../utils/mockData';
-import { scheduleBookingReminder, cancelScheduledNotification } from '../utils/notifications';
+  scheduleBookingReminder,
+  cancelScheduledNotification,
+} from '../utils/notifications';
 
-interface BookingStoreState {
-  // State
-  userSession: UserSession;
+interface BookingState {
   rooms: Room[];
   bookings: Booking[];
-  filters: FilterState;
+  currentUser: User;
 
   // Actions
-  setFilter: (partial: Partial<FilterState>) => void;
-  resetFilters: () => void;
-  toggleEquipmentFilter: (item: EquipmentType) => void;
+  createBooking: (params: {
+    roomId: string;
+    date: string;
+    timeSlot: TimeSlot;
+    purpose: string;
+  }) => Promise<{ success: boolean; error?: string; booking?: Booking }>;
 
-  // Conflict Engine & Booking Actions
-  isSlotBooked: (roomId: string, date: string, startTime: string) => boolean;
-  bookRoom: (
-    roomId: string,
-    date: string,
-    timeSlot: TimeSlot
-  ) => Promise<{ success: boolean; booking?: Booking; error?: string }>;
-  cancelBooking: (bookingId: string) => Promise<{ success: boolean; message: string }>;
-
-  // Getters & Selectors
-  getFilteredRooms: () => Room[];
+  cancelBooking: (bookingId: string) => Promise<boolean>;
+  checkInBooking: (bookingId: string) => boolean;
   getRoomById: (roomId: string) => Room | undefined;
-  getBookingById: (bookingId: string) => Booking | undefined;
-  getUserBookings: () => Booking[];
+  resetToMockData: () => void;
 }
 
-const DEFAULT_FILTERS: FilterState = {
-  building: 'All',
-  capacityCategory: 'all',
-  equipment: [],
-  searchQuery: '',
+const DEFAULT_USER: User = {
+  id: 'user_vku_23it296',
+  studentId: '23IT296',
+  fullName: 'Nguyễn Thanh Tú',
+  email: 'tunt.23it@vku.udn.vn',
+  major: 'Kỹ thuật Phần mềm (VKU)',
+  phone: '0905 123 456',
+  department: 'Khoa Khoa học Máy tính',
+  avatarUrl:
+    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
 };
 
-export const useBookingStore = create<BookingStoreState>()(
+export const useBookingStore = create<BookingState>()(
   persist(
     (set, get) => ({
-      userSession: CURRENT_USER,
-      rooms: INITIAL_ROOMS,
-      bookings: INITIAL_BOOKINGS,
-      filters: DEFAULT_FILTERS,
+      rooms: MOCK_ROOMS,
+      bookings: MOCK_BOOKINGS,
+      currentUser: DEFAULT_USER,
 
-      setFilter: (partial) =>
-        set((state) => ({
-          filters: { ...state.filters, ...partial },
-        })),
-
-      resetFilters: () =>
-        set(() => ({
-          filters: DEFAULT_FILTERS,
-        })),
-
-      toggleEquipmentFilter: (item: EquipmentType) =>
-        set((state) => {
-          const exists = state.filters.equipment.includes(item);
-          return {
-            filters: {
-              ...state.filters,
-              equipment: exists
-                ? state.filters.equipment.filter((e) => e !== item)
-                : [...state.filters.equipment, item],
-            },
-          };
-        }),
-
-      /**
-       * CONFLICT PREVENTION ENGINE:
-       * Checks if the 2-hour slot for a specific room and date is already taken by a confirmed booking.
-       */
-      isSlotBooked: (roomId: string, date: string, startTime: string): boolean => {
-        const { bookings } = get();
-        return bookings.some(
-          (b) =>
-            b.roomId === roomId &&
-            b.date === date &&
-            b.timeSlot.startTime === startTime &&
-            b.status === 'confirmed'
-        );
+      getRoomById: (roomId: string) => {
+        return get().rooms.find(r => r.id === roomId);
       },
 
-      /**
-       * Atomic booking transaction with conflict prevention
-       */
-      bookRoom: async (roomId: string, date: string, timeSlot: TimeSlot) => {
-        const state = get();
-        const room = state.rooms.find((r) => r.id === roomId);
+      createBooking: async ({ roomId, date, timeSlot, purpose }) => {
+        const { rooms, bookings, currentUser } = get();
+        const room = rooms.find(r => r.id === roomId);
 
         if (!room) {
-          return { success: false, error: 'Không tìm thấy thông tin phòng học.' };
+          return { success: false, error: 'Phòng học không tồn tại.' };
         }
 
-        // 1. Conflict Prevention Check
-        const conflict = state.isSlotBooked(roomId, date, timeSlot.startTime);
-        if (conflict) {
+        // 1. Kiểm tra phòng đã có người đặt khung giờ này chưa
+        if (isSlotBooked(roomId, date, timeSlot.id, bookings)) {
           return {
             success: false,
-            error: `Khung giờ ${timeSlot.label} ngày ${date} tại ${room.name} đã được đặt trước bởi người khác!`,
+            error: `Khung giờ ${timeSlot.label} của ${room.name} đã được đặt bởi sinh viên khác!`,
           };
         }
 
-        // 2. Generate Unique Booking details & QR payload
-        const timestamp = Date.now();
-        const randomHash = Math.random().toString(36).substring(2, 7).toUpperCase();
-        const bookingId = `bkg_${timestamp}_${randomHash}`;
+        // 2. Kiểm tra sinh viên có bị trùng lịch cá nhân không
+        if (hasUserConflict(currentUser.id, date, timeSlot.id, bookings)) {
+          return {
+            success: false,
+            error: `Bạn đã có lịch đặt phòng khác trong ${timeSlot.label} vào ngày này.`,
+          };
+        }
 
-        // QR Code payload containing verification JSON
-        const qrPayload = JSON.stringify({
-          ticketId: bookingId,
-          roomCode: room.code,
-          building: room.building,
-          floor: room.floor,
+        const newBookingId = generateBookingId();
+        const qrCode = generateQrPayload({
+          bookingId: newBookingId,
+          roomId,
           date,
-          slot: timeSlot.label,
-          studentId: state.userSession.studentId,
-          studentName: state.userSession.name,
-          issuedAt: new Date().toISOString(),
+          timeSlotId: timeSlot.id,
+          studentId: currentUser.studentId,
         });
 
         const newBooking: Booking = {
-          id: bookingId,
-          roomId: room.id,
-          roomName: room.name,
-          building: room.building,
-          floor: room.floor,
-          userId: state.userSession.id,
-          userName: state.userSession.name,
-          userStudentId: state.userSession.studentId,
+          id: newBookingId,
+          roomId,
+          userId: currentUser.id,
+          userName: currentUser.fullName,
+          studentId: currentUser.studentId,
           date,
           timeSlot,
-          qrCode: qrPayload,
+          purpose: purpose.trim() || 'Học tập / Nghiên cứu tự do',
+          status: 'CONFIRMED',
+          qrCode,
           createdAt: new Date().toISOString(),
-          status: 'confirmed',
         };
 
-        // 3. Schedule 15-minute alert notification
+        // Lập lịch nhắc nhở Local Notification trước 15 phút
         try {
           const notificationId = await scheduleBookingReminder(newBooking, room);
           if (notificationId) {
             newBooking.notificationId = notificationId;
           }
-        } catch (notifErr) {
-          console.warn('Failed to schedule reminder:', notifErr);
+        } catch (e) {
+          console.warn('Không thể lên lịch notification:', e);
         }
 
-        // 4. Commit to Zustand state (persists into AsyncStorage)
-        set((prevState) => ({
-          bookings: [newBooking, ...prevState.bookings],
-        }));
+        set({
+          bookings: [newBooking, ...bookings],
+        });
 
         return { success: true, booking: newBooking };
       },
 
-      /**
-       * Cancel an active booking and cancel the scheduled notification
-       */
       cancelBooking: async (bookingId: string) => {
-        const state = get();
-        const targetBooking = state.bookings.find((b) => b.id === bookingId);
+        const { bookings } = get();
+        const booking = bookings.find(b => b.id === bookingId);
+        if (!booking) return false;
 
-        if (!targetBooking) {
-          return { success: false, message: 'Không tìm thấy lịch đặt phòng.' };
+        // Hủy notification đã lên lịch
+        if (booking.notificationId) {
+          await cancelScheduledNotification(booking.notificationId);
         }
 
-        // Cancel scheduled notification if attached
-        if (targetBooking.notificationId) {
-          await cancelScheduledNotification(targetBooking.notificationId);
-        }
-
-        // Update booking status to cancelled to free up the slot
-        set((prevState) => ({
-          bookings: prevState.bookings.map((b) =>
-            b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
+        set({
+          bookings: bookings.map(b =>
+            b.id === bookingId ? { ...b, status: 'CANCELLED' as const } : b
           ),
-        }));
-
-        return { success: true, message: 'Đã hủy lịch đặt phòng thành công.' };
-      },
-
-      /**
-       * High-performance filtered rooms selector
-       */
-      getFilteredRooms: (): Room[] => {
-        const { rooms, filters } = get();
-
-        return rooms.filter((room) => {
-          // Building filter
-          if (filters.building !== 'All' && room.building !== filters.building) {
-            return false;
-          }
-
-          // Capacity filter
-          if (filters.capacityCategory === 'small' && room.capacity >= 6) {
-            return false; // <6 seats
-          }
-          if (
-            filters.capacityCategory === 'medium' &&
-            (room.capacity < 6 || room.capacity > 10)
-          ) {
-            return false; // 6-10 seats
-          }
-          if (filters.capacityCategory === 'large' && room.capacity <= 10) {
-            return false; // >10 seats
-          }
-
-          // Equipment filter (must have all selected equipment)
-          if (
-            filters.equipment.length > 0 &&
-            !filters.equipment.every((eq) => room.equipment.includes(eq))
-          ) {
-            return false;
-          }
-
-          // Search query filter (search by room name, code, or description)
-          if (filters.searchQuery.trim() !== '') {
-            const query = filters.searchQuery.toLowerCase().trim();
-            const matchesName = room.name.toLowerCase().includes(query);
-            const matchesCode = room.code.toLowerCase().includes(query);
-            const matchesDesc = room.description.toLowerCase().includes(query);
-            if (!matchesName && !matchesCode && !matchesDesc) {
-              return false;
-            }
-          }
-
-          return true;
         });
+        return true;
       },
 
-      getRoomById: (roomId: string) => {
-        return get().rooms.find((r) => r.id === roomId);
+      checkInBooking: (bookingId: string) => {
+        const { bookings } = get();
+        const booking = bookings.find(b => b.id === bookingId);
+        if (!booking || booking.status !== 'CONFIRMED') return false;
+
+        set({
+          bookings: bookings.map(b =>
+            b.id === bookingId
+              ? {
+                  ...b,
+                  status: 'CHECKED_IN' as const,
+                  checkedInAt: new Date().toISOString(),
+                }
+              : b
+          ),
+        });
+        return true;
       },
 
-      getBookingById: (bookingId: string) => {
-        return get().bookings.find((b) => b.id === bookingId);
-      },
-
-      getUserBookings: () => {
-        const { bookings, userSession } = get();
-        return bookings.filter((b) => b.userId === userSession.id);
+      resetToMockData: () => {
+        set({
+          rooms: MOCK_ROOMS,
+          bookings: MOCK_BOOKINGS,
+        });
       },
     }),
     {
-      name: 'vku-booking-storage-v1',
+      name: 'vku_study_room_booking_storage',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
+      partialize: state => ({
         bookings: state.bookings,
-        userSession: state.userSession,
       }),
     }
   )
 );
-
