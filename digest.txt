@@ -1,0 +1,4351 @@
+Directory structure:
+└── vku-room-booking/
+    ├── README.md
+    ├── AGENTS.md
+    ├── app.json
+    ├── App.tsx
+    ├── CLAUDE.md
+    ├── DANH_GIA_VA_KE_HOACH_DU_AN.md
+    ├── index.ts
+    ├── LICENSE
+    ├── package.json
+    ├── tsconfig.json
+    ├── scripts/
+    │   └── patch-expo-notifications.js
+    ├── src/
+    │   ├── components/
+    │   │   ├── BookingPassModal.tsx
+    │   │   ├── DateSelector.tsx
+    │   │   ├── FilterChips.tsx
+    │   │   ├── RoomCard.tsx
+    │   │   └── TimeSlotPicker.tsx
+    │   ├── navigation/
+    │   │   └── AppNavigator.tsx
+    │   ├── screens/
+    │   │   ├── HomeScreen.tsx
+    │   │   ├── MyBookingsScreen.tsx
+    │   │   └── RoomDetailScreen.tsx
+    │   ├── store/
+    │   │   └── useBookingStore.ts
+    │   ├── types/
+    │   │   └── index.ts
+    │   └── utils/
+    │       ├── dateUtils.ts
+    │       ├── mockData.ts
+    │       └── notifications.ts
+    └── .claude/
+        └── settings.json
+
+================================================
+FILE: README.md
+================================================
+# 🎓 VKU Study Room Booking - Ứng Dụng Đặt Phòng Học Thời Gian Thực
+
+Ứng dụng di động đặt phòng học & không gian nghiên cứu thời gian thực dành cho sinh viên và giảng viên Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU - Đại học Đà Nẵng). Được xây dựng với **React Native**, **Expo SDK**, **TypeScript**, **Zustand**, **AsyncStorage**, và **Expo Notifications**.
+
+---
+
+## 🚀 Tính Năng Nổi Bật (Core Features)
+
+### 1. ⚡ Giao Diện Hiệu Năng Cao (60 FPS Scrolling)
+- **FlatList Tối Ưu Tận Cùng**: Tinh chỉnh `initialNumToRender={5}`, `maxToRenderPerBatch={5}`, `windowSize={7}`, `removeClippedSubviews`, cùng hàm `getItemLayout` tính trước kích thước cố định (`ROOM_CARD_HEIGHT = 295px`), loại bỏ hoàn toàn hiện tượng giật lag (frame drops) khi cuộn danh sách phòng.
+- **Memoized RoomCard**: Component hiển thị thẻ phòng được bọc bằng `React.memo` với hàm so sánh tùy biến, ngăn re-render không cần thiết khi các trạng thái khác thay đổi.
+- **Bộ Lọc Đa Chiều (FilterChips)**: Lọc tức thời theo Tòa nhà (Tòa A, B, C, V), Sức chứa (<6 chỗ, 6-10 chỗ, >10 chỗ), và danh mục Trang thiết bị (Máy chiếu, Smart TV, Mạng LAN, Điều hòa, Bảng trắng...).
+
+### 2. 📅 Bộ Chọn Lịch 7 Ngày & Khung Giờ 2 Tiếng Cố Định
+- Thanh chọn ngày cuộn ngang trong 7 ngày kế tiếp với giao diện trực quan, tự động đánh dấu "Hôm nay".
+- Lưới các ca học rời rạc chuẩn 2 giờ:
+  - `07:30 – 09:30` (Ca 1)
+  - `09:30 – 11:30` (Ca 2)
+  - `12:30 – 14:30` (Ca 3)
+  - `14:30 – 16:30` (Ca 4)
+  - `16:30 – 18:30` (Ca 5)
+  - `18:30 – 20:30` (Ca 6)
+- Tự động kiểm tra trạng thái và **vô hiệu hóa trực quan (Disabled & Locked)** đối với các khung giờ đã có người đặt trước hoặc ca học đã trôi qua trong ngày.
+
+### 3. 🛡️ Bộ Máy Chống Xung Đột Lịch (Conflict Prevention Engine)
+- Được tích hợp trực tiếp trong Zustand store (`useBookingStore.ts`).
+- Thực hiện kiểm tra nguyên tử (atomic validation) trên cặp khóa `[roomId + date + timeSlot.startTime]`.
+- Ngăn chặn triệt để tình trạng đặt trùng phòng (double booking).
+- Lưu trữ trạng thái bền vững trên thiết bị bằng `@react-native-async-storage/async-storage`.
+
+### 4. 🎫 Thẻ Check-in Điện Tử & Mã QR Tự Động
+- Khi đặt phòng thành công, ứng dụng sinh ra thẻ phòng dạng vé điện tử sang trọng.
+- Tích hợp mã QR (`react-native-qrcode-svg`) mã hóa dữ liệu xác thực (Mã vé, Phòng, Tòa, Ca học, Tên SV, MSSV, Dấu thời gian).
+- Sinh viên có thể quét mã tại cổng kiểm soát hoặc xuất trình cho giám thị phòng lab.
+
+### 5. 🔔 Thông Báo Cục Bộ Nhắc Lịch Trước 15 Phút
+- Sử dụng `expo-notifications` để lên lịch thông báo cục bộ chính xác trước **15 phút** so với thời điểm bắt đầu ca học.
+- Đã cấu hình notification channel riêng cho Android (`study-room-alerts`) với độ ưu tiên cao (`AndroidImportance.HIGH`).
+- Tự động hủy thông báo đã hẹn giờ nếu người dùng bấm "Hủy lịch đặt phòng".
+
+---
+
+## 📁 Cấu Trúc Dự Án (Architecture Overview)
+
+```
+vku-room-booking/
+├── App.tsx                      # Root App, SafeAreaProvider & Notification Init
+├── app.json                     # Cấu hình Expo, Android package, Notification plugins
+├── package.json                 # Khai báo dependencies chuẩn
+├── tsconfig.json                # TypeScript strict config
+└── src/
+    ├── types/                   # Định nghĩa TypeScript Interfaces & Types
+    │   └── index.ts             # Room, TimeSlot, Booking, UserSession, FilterState...
+    ├── utils/                   # Dữ liệu & Tiện ích
+    │   ├── mockData.ts          # Cơ sở dữ liệu mẫu 6 phòng học (A, B, C, V), ca học, SV
+    │   ├── dateUtils.ts         # Tính toán 7 ngày, định dạng ngày tiếng Việt, tính mốc 15 phút
+    │   └── notifications.ts     # Cấu hình expo-notifications & lập lịch nhắc nhở
+    ├── store/                   # Quản lý State toàn cục
+    │   └── useBookingStore.ts   # Zustand Store + AsyncStorage + Conflict Engine
+    ├── components/              # Các UI Components hiệu năng cao
+    │   ├── FilterChips.tsx      # Bộ lọc ngang Tòa, Sức chứa, Tiện ích
+    │   ├── RoomCard.tsx         # Thẻ phòng học bọc React.memo, kích thước cố định 295px
+    │   ├── DateSelector.tsx     # Bộ chọn 7 ngày ngang trực quan
+    │   ├── TimeSlotPicker.tsx   # Lưới ca học 2 giờ kèm khóa xung đột
+    │   └── BookingPassModal.tsx # Thẻ Check-in tích hợp QR Code
+    ├── screens/                 # Các màn hình chính
+    │   ├── HomeScreen.tsx       # Khám phá phòng với FlatList 60fps
+    │   ├── RoomDetailScreen.tsx # Chi tiết phòng, chọn ngày, ca học & đặt phòng
+    │   └── MyBookingsScreen.tsx # Quản lý lịch đã đặt & xem lại vé QR
+    └── navigation/
+        └── AppNavigator.tsx     # Cấu hình NativeStack React Navigation
+```
+
+---
+
+## 🛠️ Công Nghệ Sử Dụng (Tech Stack)
+
+| Thư viện | Phiên bản | Vai trò |
+|---|---|---|
+| **Expo SDK** | `~57.0` | Nền tảng phát triển ứng dụng React Native |
+| **React & React Native** | `19.2 / 0.86` | Thư viện UI nền tảng |
+| **TypeScript** | `~6.0` | Đảm bảo an toàn kiểu dữ liệu (Strict Mode) |
+| **Zustand** | `^5.0` | State management siêu nhẹ và linh hoạt |
+| **AsyncStorage** | `2.2.0` | Lưu trữ dữ liệu lịch đặt phòng trên máy |
+| **React Navigation** | `^7.3` | Điều hướng màn hình mượt mà |
+| **Expo Notifications**| `~57.0` | Lập lịch thông báo cục bộ trước 15 phút |
+| **react-native-qrcode-svg** | `^6.3` | Sinh mã QR xác thực vé check-in |
+| **lucide-react-native** | `^1.43` | Bộ biểu tượng đồ họa hiện đại |
+
+---
+
+## 💻 Hướng Dẫn Chạy Ứng Dụng (Getting Started)
+
+Khi bạn sẵn sàng kiểm thử trên thiết bị:
+
+1. **Mở terminal và di chuyển vào thư mục dự án:**
+   ```bash
+   cd C:\MyProject\profilefortus\vku-room-booking
+   ```
+
+2. **Khởi chạy Metro Bundler:**
+   ```bash
+   npx expo start
+   ```
+
+3. **Mở ứng dụng:**
+   - **Expo Go (Điện thoại thật)**: Quét mã QR hiển thị trong terminal bằng ứng dụng Expo Go trên Android hoặc camera trên iOS.
+   - **Android Emulator**: Nhấn phím `a`.
+   - **iOS Simulator**: Nhấn phím `i` (yêu cầu macOS).
+   - **Web Browser**: Nhấn phím `w`.
+
+---
+
+## 🧪 Kịch Bản Kiểm Thử (Testing Scenarios)
+
+1. **Kiểm tra Conflict Prevention (Chống trùng giờ)**:
+   - Thử đặt phòng `A.101` vào ca `09:30 – 11:30` hôm nay.
+   - Hệ thống sẽ hiển thị biểu tượng ổ khóa màu đỏ với nhãn **"Đã đặt"** và không cho phép chọn (do đã có trong mock booking sẵn).
+2. **Kiểm tra Đặt phòng & Sinh mã QR**:
+   - Chọn một ca còn trống (màu xanh lá), nhấn **"Xác nhận đặt"**.
+   - Thẻ check-in sẽ lập tức bật lên kèm mã QR sắc nét chứa thông tin vé.
+3. **Kiểm tra Lưu trữ & Đồng bộ**:
+   - Vào tab **"Lịch Đặt Phòng Của Tôi"** để xem ca học vừa đặt.
+   - Dữ liệu được lưu trữ tự động trong `AsyncStorage`, giữ nguyên kể cả khi tải lại ứng dụng.
+4. **Kiểm tra Lập lịch Thông báo**:
+   - Khi đặt phòng, thông báo được tự động hẹn giờ đúng trước 15 phút so với giờ bắt đầu ca học. Nếu ca học cách dưới 15 phút, một thông báo xác nhận sẽ kích hoạt tức thì.
+
+
+
+
+================================================
+FILE: AGENTS.md
+================================================
+# Expo HAS CHANGED
+
+Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+
+
+
+================================================
+FILE: app.json
+================================================
+{
+  "expo": {
+    "name": "VKU Study Room Booking",
+    "slug": "vku-room-booking",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "vn.udn.vku.roombooking"
+    },
+    "android": {
+      "package": "vn.udn.vku.roombooking",
+      "adaptiveIcon": {
+        "backgroundColor": "#2563EB",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2563EB",
+          "defaultChannel": "study-room-alerts"
+        }
+      ]
+    ]
+  }
+}
+
+
+
+================================================
+FILE: App.tsx
+================================================
+import React, { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { AppNavigator } from './src/navigation/AppNavigator';
+import { requestNotificationPermissions } from './src/utils/notifications';
+
+export default function App() {
+  useEffect(() => {
+    /**
+     * =========================================================================
+     * KHỞI TẠO THÔNG BÁO CỤC BỘ (LOCAL NOTIFICATIONS ONLY)
+     * =========================================================================
+     * - Chỉ xin quyền thông báo cục bộ và tạo Android Channel khi khởi động app.
+     * - TUYỆT ĐỐI KHÔNG gắn các listener runtime như:
+     *     * Notifications.addNotificationReceivedListener(...)
+     *     * Notifications.addNotificationResponseReceivedListener(...)
+     *     * Notifications.addPushTokenListener(...)
+     *   để tránh kích hoạt warning hoặc crash không mong muốn trên Expo Go (SDK 57).
+     * =========================================================================
+     */
+    const initLocalNotifications = async () => {
+      try {
+        await requestNotificationPermissions();
+      } catch (err) {
+        console.warn('[VKU App] Không thể khởi tạo quyền thông báo cục bộ:', err);
+      }
+    };
+
+    initLocalNotifications();
+
+    /**
+     * Ghi chú: Nếu chuyển sang EAS Development Build trong tương lai và cần hứng
+     * tương tác khi người dùng chạm vào thông báo, có thể mở lại đoạn code mẫu sau:
+     *
+     * // const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+     * //   console.log('Notification received:', notification);
+     * // });
+     * // const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+     * //   console.log('Notification clicked:', response);
+     * // });
+     * // return () => {
+     * //   receivedSubscription.remove();
+     * //   responseSubscription.remove();
+     * // };
+     */
+  }, []);
+
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <AppNavigator />
+    </SafeAreaProvider>
+  );
+}
+
+
+
+================================================
+FILE: CLAUDE.md
+================================================
+@AGENTS.md
+
+
+
+================================================
+FILE: DANH_GIA_VA_KE_HOACH_DU_AN.md
+================================================
+# 📊 BÁO CÁO ĐÁNH GIÁ DỰ ÁN & LỘ TRÌNH PHÁT TRIỂN
+## Ứng Dụng Đặt Phòng Học VKU (VKU Study Room Booking)
+
+> **Ngày thực hiện đánh giá:** 16/09/2026  
+> **Phiên bản hiện tại:** 1.0.0  
+> **Nền tảng:** React Native (Expo SDK 57), TypeScript, Zustand  
+> **Đơn vị áp dụng:** Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU - Đại học Đà Nẵng)
+
+---
+
+## 📑 MỤC LỤC
+1. [Tổng Quan Dự Án](#1-tổng-quan-dự-án)
+2. [Chi Tiết Những Gì Đã Có (Current Implementation)](#2-chi-tiết-những-gì-đã-có)
+3. [Nhận Xét & Đánh Giá Chuyên Sâu (Review & Critique)](#3-nhận-xét--đánh-giá-chuyên-sâu)
+   - 3.1. Ưu điểm nổi bật (Strengths)
+   - 3.2. Điểm hạn chế hiện tại (Limitations)
+4. [Đề Xuất Những Gì Có Thể Làm Tiếp (Development Roadmap)](#4-đề-xuất-những-gì-có-thể-làm-tiếp)
+   - 4.1. Giai đoạn 1: Nâng cao Trải nghiệm Sinh viên (UX & UI Polish)
+   - 4.2. Giai đoạn 2: Quét QR Check-in & Phân quyền Quản lý (Camera & Roles)
+   - 4.3. Giai đoạn 3: Xây dựng Backend & Đồng bộ Thời gian thực (Realtime Cloud)
+   - 4.4. Giai đoạn 4: Tính năng Thông minh & Hệ sinh thái Số VKU
+5. [Kết Luận](#5-kết-luận)
+
+---
+
+## 1. TỔNG QUAN DỰ ÁN
+
+Dự án **VKU Study Room Booking** là giải pháp ứng dụng di động hỗ trợ sinh viên và giảng viên VKU tra cứu tình trạng phòng học/phòng nghiên cứu/phòng lab trống, đặt phòng học nhóm theo các ca học cố định (2 giờ/ca), tự động ngăn chặn xung đột lịch (double-booking), sinh mã QR check-in điện tử và lập lịch thông báo nhắc nhở trước giờ học.
+
+### 🛠️ Ngăn Xếp Công Nghệ (Tech Stack):
+- **Core Framework:** React Native `0.86.3` / React `19.2.3`
+- **Platform:** Expo SDK `~57.0.21` (Architecture mới, tương thích Expo Go & Development Build)
+- **Ngôn ngữ:** TypeScript `~6.0.3` (Strict mode, Type-safety toàn diện)
+- **Quản lý trạng thái (State Management):** Zustand `^5.0.15` kết hợp `@react-native-async-storage/async-storage` (Persist storage)
+- **Điều hướng (Navigation):** React Navigation v7 (`@react-navigation/native` & `@react-navigation/native-stack`)
+- **Đồ họa & Biểu tượng:** `lucide-react-native`
+- **Mã QR Code:** `react-native-qrcode-svg` & `react-native-svg`
+- **Thông báo cục bộ:** `expo-notifications`
+
+---
+
+## 2. CHI TIẾT NHỮNG GÌ ĐÃ CÓ
+
+Dự án hiện đã hoàn thiện một bộ khung ứng dụng hoàn chỉnh về mặt luồng người dùng (User Flow) phía client với cấu trúc thư mục rõ ràng và mã nguồn đạt chuẩn cao:
+
+### 2.1. Cấu Trúc Mã Nguồn (Project Structure)
+```
+vku-room-booking/
+├── App.tsx                      # Root App, SafeAreaProvider & Notification Init
+├── app.json                     # Cấu hình Expo, Android Package, Notification Plugin
+├── package.json                 # Khai báo dependencies
+├── tsconfig.json                # Cấu hình TypeScript Strict Mode
+└── src/
+    ├── types/                   # Định nghĩa các TypeScript interfaces và types
+    │   └── index.ts             # Room, TimeSlot, Booking, UserSession, FilterState...
+    ├── store/                   # Zustand Store và Transaction Engine
+    │   └── useBookingStore.ts   # Quản lý State toàn cục, AsyncStorage, Conflict Engine
+    ├── components/              # Các UI components tái sử dụng và tối ưu hiệu năng
+    │   ├── FilterChips.tsx      # Bộ lọc đa chiều (Tòa nhà, Sức chứa, Tiện ích)
+    │   ├── RoomCard.tsx         # Thẻ hiển thị phòng học (React.memo, fixed height 295px)
+    │   ├── DateSelector.tsx     # Thanh chọn 7 ngày kế tiếp cuộn ngang
+    │   ├── TimeSlotPicker.tsx   # Lưới 6 ca học (2h/ca) kèm khóa trạng thái trực quan
+    │   └── BookingPassModal.tsx # Thẻ Check-in điện tử giả lập vé cứng tích hợp QR SVG
+    ├── screens/                 # Các màn hình chính
+    │   ├── HomeScreen.tsx       # Khám phá phòng học, tìm kiếm, lọc, FlatList 60fps
+    │   ├── RoomDetailScreen.tsx # Chi tiết phòng, tiện ích, chọn ngày & ca, đặt phòng
+    │   └── MyBookingsScreen.tsx # Quản lý danh sách lịch đặt (Sắp tới / Lịch sử), hủy lịch
+    ├── navigation/
+    │   └── AppNavigator.tsx     # Cấu hình NativeStack React Navigation
+    └── utils/                   # Tiện ích và dữ liệu mẫu
+        ├── dateUtils.ts         # Tính toán ngày tiếng Việt, format ngày, check giờ trôi qua
+        ├── mockData.ts          # Mock Data 6 phòng chuẩn VKU (Tòa A, B, C, V), ca học, user
+        └── notifications.ts     # Cấu hình channel Android & lập lịch nhắc nhở 15 phút
+```
+
+### 2.2. Các Tính Năng Đã Hoàn Thiện:
+1. **Giao diện Trang chủ (HomeScreen) Tối Ưu 60 FPS:**
+   - Header hiển thị sinh viên đăng nhập mẫu (Avatar, Tên: *Nguyễn Văn An*, MSSV: *22IT108*).
+   - Nút vé tắt truy cập nhanh "Lịch của tôi" kèm badge số lượng lịch sắp tới.
+   - Thanh tìm kiếm thời gian thực theo mã phòng (A.101, B.204...), tên phòng hoặc mô tả.
+   - Bộ lọc linh hoạt (`FilterChips`): Lọc theo Tòa (A, B, C, V, Tất cả), Sức chứa (<6, 6-10, >10), Tiện ích (Máy chiếu, Smart TV, Bảng trắng, Mạng LAN, Điều hòa...). Có nút reset bộ lọc.
+   - `FlatList` tối ưu tận cùng: Tinh chỉnh `getItemLayout`, `initialNumToRender={5}`, `maxToRenderPerBatch={5}`, `windowSize={7}`, `removeClippedSubviews`, bọc `RoomCard` bằng `React.memo` giúp cuộn mượt không bị tụt khung hình.
+
+2. **Khung Giờ 2 Tiếng & Bộ Chọn 7 Ngày:**
+   - Bộ chọn ngày cuộn ngang trong 7 ngày tới, tự động xác định và đánh dấu "Hôm nay".
+   - 6 ca học cố định 2 giờ: `07:30 - 09:30`, `09:30 - 11:30`, `12:30 - 14:30`, `14:30 - 16:30`, `16:30 - 18:30`, `18:30 - 20:30`.
+   - Tự động khóa ca học nếu giờ đã trôi qua trong ngày (`isSlotInPast`) hoặc đã có người đặt trước (`isSlotBooked`).
+
+3. **Bộ Máy Chống Trùng Giờ (Conflict Prevention Engine):**
+   - Tích hợp trực tiếp tại `useBookingStore.ts`.
+   - Kiểm tra nguyên tử (Atomic Check) trên bộ khóa `[roomId + date + timeSlot.startTime]`.
+   - Loại trừ hoàn toàn tình trạng đặt trùng khung giờ cho cùng một phòng.
+
+4. **Thẻ Check-in Điện Tử & QR Code:**
+   - Thiết kế dạng vé sang trọng với vết cắt (ticket notch) và đường nét đứt cổ điển.
+   - Sinh mã QR (`react-native-qrcode-svg`) mã hóa JSON: mã vé, thông tin phòng, tòa, tầng, ca học, sinh viên, MSSV, dấu thời gian.
+   - Có thể mở xem lại bất cứ lúc nào từ màn hình "Lịch Đặt Phòng Của Tôi".
+
+5. **Thông Báo Nhắc Nhở Trước 15 Phút (Local Notifications):**
+   - Sử dụng `expo-notifications` xin quyền và cấu hình Android Channel `study-room-alerts` với mức ưu tiên cao (`AndroidImportance.HIGH`).
+   - Tự động tính toán điểm thời gian `triggerDate` lùi lại đúng 15 phút trước giờ bắt đầu ca học.
+   - Tự động hủy thông báo đã lên lịch khi người dùng bấm "Hủy lịch đặt".
+
+6. **Lưu Trữ Bền Vững (Persistence):**
+   - Trạng thái các lịch đặt phòng và phiên sinh viên được lưu trữ qua `@react-native-async-storage/async-storage`. Dữ liệu vẫn được bảo lưu khi đóng/mở lại ứng dụng.
+
+---
+
+## 3. NHẬN XÉT & ĐÁNH GIÁ CHUYÊN SÂU
+
+### 3.1. Ưu Điểm Nổi Bật (Strengths)
+- ✅ **Chất lượng Code & Type Safety tuyệt vời:** Toàn bộ dự án tuân thủ chặt chẽ TypeScript, kiểu dữ liệu được định nghĩa chi tiết tại `src/types/index.ts`. Lệnh kiểm thử biên dịch `npx tsc --noEmit` hoàn thành với **0 lỗi**.
+- ✅ **Thiết kế UI/UX hiện đại, đồng bộ:** Tông màu xanh chủ đạo (`#2563EB`) gắn liền với nhận diện VKU; mỗi tòa nhà (A, B, C, V) có bảng màu badge riêng biệt; các trạng thái trống/đã đặt/đã chọn trực quan và dễ hiểu.
+- ✅ **Tối ưu hiệu năng xuất sắc:** Việc phân tích trước chiều cao thẻ phòng `ROOM_CARD_HEIGHT = 295` và áp dụng `getItemLayout` cùng `React.memo` giúp FlatList hoạt động trơn tru trên cả các thiết bị cấu hình thấp.
+- ✅ **Trải nghiệm Offline/Local hoàn hảo:** Ứng dụng hoạt động độc lập không cần backend lúc này, đáp ứng nhanh tức thì (0ms latency), đầy đủ chu trình từ chọn phòng -> đặt -> lưu -> xem vé -> hủy vé.
+
+### 3.2. Điểm Hạn Chế Hiện Tại (Limitations)
+- ⚠️ **Dữ liệu Mock & Độc lập cục bộ (Local-Only):** Dữ liệu đặt phòng chỉ nằm trên máy của người dùng. Nếu hai sinh viên sử dụng hai thiết bị khác nhau, họ sẽ không thấy lịch đặt của nhau do chưa kết nối với Cơ sở dữ liệu đám mây (Cloud Database).
+- ⚠️ **Chưa có Xác thực Sinh viên thực tế (Authentication):** Hiện đang gán cứng tài khoản demo của bạn sinh viên *Nguyễn Văn An - 22IT108*. Chưa có luồng Đăng nhập bằng tài khoản Google trường `@vku.udn.vn` hoặc SSO trường.
+- ⚠️ **Chưa có Luồng Quét QR Check-in:** Ứng dụng đã sinh mã QR rất đẹp nhưng chưa có chức năng mở Camera để Quản lý phòng lab / Giảng viên / Bảo vệ quét xác nhận check-in thực tế.
+- ⚠️ **Chưa có Ràng buộc nghiệp vụ sinh viên:** Chưa có quy định giới hạn số ca tối đa một sinh viên được đặt trong tuần (tránh tình trạng giữ chỗ quá nhiều).
+- ⚠️ **Chưa có Báo cáo sự cố phòng học:** Sinh viên chưa thể gửi phản ánh nếu phòng gặp sự cố (ví dụ: máy chiếu hỏng, thiếu dây mạng LAN, điều hòa lỗi).
+
+---
+
+## 4. ĐỀ XUẤT NHỮNG GÌ CÓ THỂ LÀM TIẾP (DEVELOPMENT ROADMAP)
+
+Lộ trình phát triển được phân bổ theo 4 giai đoạn logic từ giao diện, tính năng cục bộ cho tới tích hợp hệ thống máy chủ và công nghệ thông minh:
+
+### 4.1. Giai Đoạn 1: Nâng Cao Trải Nghiệm Sinh Viên (UX & UI Polish)
+*(Thời gian dự kiến: 1 - 2 ngày - Dễ thực hiện ngay trên app hiện có)*
+
+1. **Bổ sung Form Xác Nhận Thông Tin Đặt Phòng:**
+   - Cho phép sinh viên nhập: **Lý do / Mục đích mượn** (Ôn thi, Làm đồ án tốt nghiệp, Họp CLB, Luyện Hackathon...).
+   - Nhập **Số lượng thành viên** dự kiến tham gia và danh sách MSSV thành viên nhóm (nếu có).
+2. **Đồng Hồ Đếm Ngược (Countdown Timer):**
+   - Hiển thị bộ đếm ngược trực tiếp trên Thẻ vé và Màn hình Lịch của tôi: *"Còn 01 giờ 45 phút nữa đến phiên học"*.
+3. **Màn Hình Trang Cá Nhân (Profile & Settings Screen):**
+   - Xem thông tin sinh viên, khoa, chuyên ngành.
+   - Chức năng chuyển đổi vai trò Demo (Sinh viên / Giảng viên / Ban Quản lý) để kiểm thử các quyền hạn khác nhau.
+   - Thống kê cá nhân: Số giờ đã học tại phòng tự học, số lần check-in thành công.
+4. **Chia Sẻ Thẻ Vé (Share Ticket):**
+   - Tích hợp `react-native-view-shot` hoặc `expo-sharing` để xuất ảnh vé check-in hoặc gửi thông tin qua Zalo/Messenger cho các thành viên trong nhóm học.
+5. **Tính Năng Báo Cáo Sự Cố (Report Issue):**
+   - Nút "Báo cáo phòng học" tại màn hình chi tiết: Báo hỏng máy chiếu, điều hòa không mát, mạng chập chờn kèm ảnh chụp.
+
+---
+
+### 4.2. Giai Đoạn 2: Quét QR Check-in & Phân Quyền (Camera & Roles)
+*(Thời gian dự kiến: 2 - 3 ngày)*
+
+1. **Tích hợp Camera Scanner (`expo-camera`):**
+   - Thêm màn hình "Quét Mã Check-in" dành cho Ban quản lý hoặc Cán bộ trực phòng lab VKU.
+   - Camera quét mã QR trên điện thoại của sinh viên, giải mã dữ liệu JSON và kiểm tra tính hợp lệ:
+     - Đúng ngày hôm nay?
+     - Đúng khung giờ hiện tại (cho phép sai số trước 10 phút)?
+     - Đúng phòng học được phân bổ?
+2. **Cập nhật Trạng thái Vé:**
+   - Khi quét thành công, trạng thái booking chuyển từ `confirmed` -> `checked-in`.
+3. **Quy Tắc Quá Giờ (No-Show Policy):**
+   - Nếu sau 15 phút từ lúc ca học bắt đầu mà sinh viên chưa quét check-in, hệ thống tự động đánh dấu vé là `no-show`, giải phóng phòng cho sinh viên khác đặt, và ghi nhận trừ điểm rèn luyện/giới hạn quyền đặt phòng lần sau.
+
+---
+
+### 4.3. Giai Đoạn 3: Xây Dựng Backend & Đồng Bộ Thời Gian Thực (Cloud Backend & Realtime)
+*(Thời gian dự kiến: 1 - 2 tuần)*
+
+1. **Lựa chọn Backend Phù Hợp:**
+   - **Lựa chọn A (Nhanh, Serverless):** **Supabase** (PostgreSQL, Row Level Security, Supabase Realtime, Supabase Auth).
+   - **Lựa chọn B (Phổ biến):** **Firebase** (Firestore Database, Firebase Auth, Cloud Functions).
+   - **Lựa chọn C (Tự chủ tối đa):** **Node.js / NestJS + PostgreSQL + Redis + Socket.io**.
+2. **Đăng Nhập Sinh Viên Bằng Email VKU:**
+   - Tích hợp Google OAuth với bộ lọc chỉ cho phép email đuôi `@vku.udn.vn` đăng nhập.
+   - Tự động trích xuất MSSV, Họ tên, Khóa học từ email sinh viên.
+3. **Đồng Bộ Lịch Thời Gian Thực (Real-time Booking Sync):**
+   - Sử dụng WebSocket hoặc Supabase Realtime / Firestore Listeners.
+   - Ngay khi một sinh viên bấm đặt một ca học, trên màn hình của tất cả các sinh viên khác đang mở phòng đó, ô ca học sẽ lập tức chuyển sang màu đỏ kèm biểu tượng khóa `Đã đặt`, ngăn chặn tranh chấp phòng tức thì.
+4. **Push Notification Toàn Cầu:**
+   - Thay thế local notification bằng Expo Push Notification Server kết hợp Firebase Cloud Messaging (FCM) / Apple Push Notification Service (APNs).
+   - Gửi thông báo khi: Đặt phòng thành công, Nhắc lịch trước 15 phút, Bị hủy phòng do bảo trì đột xuất, Nhắc đánh giá phòng sau buổi học.
+
+---
+
+### 4.4. Giai Đoạn 4: Tính Năng Thông Minh & Hệ Sinh Thái VKU (Smart Campus)
+*(Định hướng nâng cao / Đồ án tốt nghiệp / Triển khai thực tế)*
+
+1. **Bản Đồ Khuôn Viên VKU Tương Tác (Indoor & Campus Map):**
+   - Bản đồ mặt bằng các tầng Tòa A, B, C, V của VKU.
+   - Hiển thị trực quan phòng nào đang có đèn xanh (trống) và phòng nào đang có đèn đỏ (đang sử dụng).
+   - Chỉ dẫn đường đi từ cổng trường tới phòng học.
+2. **Hệ Thống Gợi Ý Phòng Học Thông Minh (Smart Recommendation):**
+   - Dựa trên nhu cầu: Số lượng thành viên nhóm, yêu cầu thiết bị (máy chiếu hay mạng LAN), thời gian rảnh -> Ứng dụng tự động gợi ý 3 phòng phù hợp nhất.
+3. **Bảng Điều Khiển Quản Trị Dành Cho Nhà Trường (Web Admin Dashboard):**
+   - Xây dựng Web Dashboard (Next.js / React) cho Phòng Quản trị Cơ sở vật chất VKU.
+   - Xem thống kê tỷ lệ lấp đầy phòng học theo ngày/tuần/tháng.
+   - Đặt lịch bảo trì phòng học (đổi trạng thái sang `maintenance`).
+   - Quản lý danh sách thiết bị và lịch sử bảo hành.
+4. **Tích hợp Khóa Cửa Thông Minh (IoT Smart Lock):**
+   - Kết nối vi điều khiển ESP32/Raspberry Pi tại cửa phòng học qua MQTT. Khi quét mã QR check-in hợp lệ, khóa cửa tự động bật mở và bật hệ thống đèn/điều hòa trong phòng.
+
+---
+
+## 5. KẾT LUẬN
+
+Dự án **VKU Study Room Booking** hiện đã có nền tảng kiến trúc rất vững chắc, code sạch, giao diện đẹp mắt, độ hoàn thiện cao và giải quyết đúng bài toán thực tế của sinh viên VKU.
+
+Các bước tiếp theo nên được ưu tiên thực hiện:
+1. **Trước mắt:** Bổ sung form nhập mục đích đặt phòng, đồng hồ đếm ngược, chia sẻ vé và màn hình Profile.
+2. **Kế tiếp:** Bổ sung tính năng quét mã QR bằng Camera để hoàn thiện chu trình check-in phòng thực tế.
+3. **Dài hạn:** Kết nối Supabase / Firebase để đồng bộ thời gian thực và tích hợp đăng nhập tài khoản sinh viên VKU.
+
+---
+*Tài liệu được tổng hợp và lập bởi AI Coding Assistant - Antigravity.*
+
+
+
+
+================================================
+FILE: index.ts
+================================================
+import { registerRootComponent } from 'expo';
+
+import App from './App';
+
+// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
+// It also ensures that whether you load the app in Expo Go or in a native build,
+// the environment is set up appropriately
+registerRootComponent(App);
+
+
+
+================================================
+FILE: LICENSE
+================================================
+The MIT License (MIT)
+
+Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: package.json
+================================================
+{
+  "name": "vku-room-booking",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.3.18",
+    "@react-navigation/native-stack": "^7.18.10",
+    "expo": "~57.0.21",
+    "expo-notifications": "~57.0.17",
+    "expo-status-bar": "~57.0.1",
+    "lucide-react-native": "^1.43.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-qrcode-svg": "^6.3.24",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.0",
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "postinstall": "node scripts/patch-expo-notifications.js"
+  },
+  "private": true
+}
+
+
+
+================================================
+FILE: tsconfig.json
+================================================
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  }
+}
+
+
+
+================================================
+FILE: scripts/patch-expo-notifications.js
+================================================
+const fs = require("fs");
+const path = require("path");
+
+// Đường dẫn các file cần patch trong node_modules/expo-notifications
+const warnFile = path.join(
+  __dirname,
+  "..",
+  "node_modules",
+  "expo-notifications",
+  "build",
+  "warnOfExpoGoPushUsage.js",
+);
+
+const autoRegFile = path.join(
+  __dirname,
+  "..",
+  "node_modules",
+  "expo-notifications",
+  "build",
+  "DevicePushTokenAutoRegistration.fx.js",
+);
+
+// 1. Patch warnOfExpoGoPushUsage.js: thay đổi throw Error thành console.warn
+if (fs.existsSync(warnFile)) {
+  let content = fs.readFileSync(warnFile, "utf8");
+  if (content.includes("throw new Error(message);")) {
+    content = content.replace(
+      "throw new Error(message);",
+      "didWarn = true;\n            console.warn(message);",
+    );
+    fs.writeFileSync(warnFile, content, "utf8");
+    console.log(
+      "[Patch] Đã patch warnOfExpoGoPushUsage.js chống crash Expo Go.",
+    );
+  }
+}
+
+// 2. Patch DevicePushTokenAutoRegistration.fx.js: không tự động đăng ký token khi chạy trong Expo Go
+if (fs.existsSync(autoRegFile)) {
+  let content = fs.readFileSync(autoRegFile, "utf8");
+  if (
+    content.includes(
+      "if (ServerRegistrationModule.getRegistrationInfoAsync) {",
+    ) &&
+    !content.includes("!isRunningInExpoGo()")
+  ) {
+    if (!content.includes("from 'expo';")) {
+      content = "import { isRunningInExpoGo } from 'expo';\n" + content;
+    }
+    content = content.replace(
+      "if (ServerRegistrationModule.getRegistrationInfoAsync) {",
+      "if (ServerRegistrationModule.getRegistrationInfoAsync && !isRunningInExpoGo()) {",
+    );
+    fs.writeFileSync(autoRegFile, content, "utf8");
+    console.log(
+      "[Patch] Đã patch DevicePushTokenAutoRegistration.fx.js chống crash Expo Go.",
+    );
+  }
+}
+
+
+
+================================================
+FILE: src/components/BookingPassModal.tsx
+================================================
+import React from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+} from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
+import { Booking } from '../types';
+import { formatDisplayDate } from '../utils/dateUtils';
+import {
+  X,
+  CheckCircle2,
+  Calendar,
+  Clock,
+  MapPin,
+  User,
+  GraduationCap,
+  AlertTriangle,
+  QrCode,
+  Sparkles,
+} from 'lucide-react-native';
+
+interface BookingPassModalProps {
+  visible: boolean;
+  booking: Booking | null;
+  onClose: () => void;
+  onCancelBooking?: (bookingId: string) => void;
+}
+
+export const BookingPassModal: React.FC<BookingPassModalProps> = ({
+  visible,
+  booking,
+  onClose,
+  onCancelBooking,
+}) => {
+  if (!booking) return null;
+
+  const handleCancelPress = () => {
+    Alert.alert(
+      'Hủy lịch đặt phòng',
+      `Bạn có chắc chắn muốn hủy lịch tại ${booking.roomName} lúc ${booking.timeSlot.label}? Khung giờ sẽ được giải phóng cho sinh viên khác.`,
+      [
+        { text: 'Giữ lại', style: 'cancel' },
+        {
+          text: 'Xác nhận hủy',
+          style: 'destructive',
+          onPress: () => {
+            if (onCancelBooking) {
+              onCancelBooking(booking.id);
+            }
+            onClose();
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.modalContent}>
+          {/* Header with Close */}
+          <View style={styles.header}>
+            <View style={styles.headerTitleRow}>
+              <Sparkles size={20} color="#2563EB" />
+              <Text style={styles.headerTitle}>Thẻ Check-in Phòng Học</Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={20} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollBody}
+          >
+            {/* Ticket Card Container */}
+            <View style={styles.ticketCard}>
+              {/* Top part: Room info & Status */}
+              <View style={styles.ticketTop}>
+                <View style={styles.statusPill}>
+                  <CheckCircle2 size={13} color="#10B981" />
+                  <Text style={styles.statusPillText}>ĐẶT PHÒNG THÀNH CÔNG</Text>
+                </View>
+
+                <Text style={styles.roomName}>{booking.roomName}</Text>
+
+                <View style={styles.locationRow}>
+                  <MapPin size={15} color="#2563EB" />
+                  <Text style={styles.locationText}>
+                    Tòa nhà {booking.building} • Tầng {booking.floor} (Khuôn viên VKU)
+                  </Text>
+                </View>
+              </View>
+
+              {/* Dotted Divider with ticket notches */}
+              <View style={styles.notchDividerWrapper}>
+                <View style={[styles.notch, styles.notchLeft]} />
+                <View style={styles.dashedLine} />
+                <View style={[styles.notch, styles.notchRight]} />
+              </View>
+
+              {/* Middle part: QR Code */}
+              <View style={styles.qrSection}>
+                <View style={styles.qrWrapper}>
+                  <QRCode
+                    value={booking.qrCode || `VKU-PASS-${booking.id}`}
+                    size={170}
+                    color="#0F172A"
+                    backgroundColor="#FFFFFF"
+                  />
+                </View>
+
+                <View style={styles.qrLabelRow}>
+                  <QrCode size={14} color="#64748B" />
+                  <Text style={styles.qrLabelText}>
+                    Mã xác thực: {booking.id.substring(0, 16)}...
+                  </Text>
+                </View>
+                <Text style={styles.qrInstruction}>
+                  Quét mã QR tại máy quét cửa phòng hoặc xuất trình cho quản lý VKU để mở khóa.
+                </Text>
+              </View>
+
+              {/* Bottom part: Details Grid */}
+              <View style={styles.ticketBottom}>
+                <View style={styles.detailRow}>
+                  <View style={styles.detailCol}>
+                    <View style={styles.detailLabelGroup}>
+                      <Calendar size={13} color="#64748B" />
+                      <Text style={styles.detailLabel}>NGÀY SỬ DỤNG</Text>
+                    </View>
+                    <Text style={styles.detailValue}>
+                      {formatDisplayDate(booking.date)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailCol}>
+                    <View style={styles.detailLabelGroup}>
+                      <Clock size={13} color="#64748B" />
+                      <Text style={styles.detailLabel}>KHUNG GIỜ</Text>
+                    </View>
+                    <Text style={[styles.detailValue, styles.highlightSlot]}>
+                      {booking.timeSlot.label}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.dividerInner} />
+
+                <View style={styles.detailRow}>
+                  <View style={styles.detailCol}>
+                    <View style={styles.detailLabelGroup}>
+                      <User size={13} color="#64748B" />
+                      <Text style={styles.detailLabel}>SINH VIÊN</Text>
+                    </View>
+                    <Text style={styles.detailValue}>{booking.userName}</Text>
+                  </View>
+
+                  <View style={styles.detailCol}>
+                    <View style={styles.detailLabelGroup}>
+                      <GraduationCap size={13} color="#64748B" />
+                      <Text style={styles.detailLabel}>MÃ SỐ SV (MSSV)</Text>
+                    </View>
+                    <Text style={styles.detailValue}>{booking.userStudentId}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.doneButton}
+                onPress={onClose}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.doneButtonText}>Hoàn tất / Đóng thẻ</Text>
+              </TouchableOpacity>
+
+              {onCancelBooking && booking.status === 'confirmed' && (
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={handleCancelPress}
+                  activeOpacity={0.7}
+                >
+                  <AlertTriangle size={15} color="#EF4444" />
+                  <Text style={styles.cancelBtnText}>Hủy lịch đặt phòng này</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
+    paddingBottom: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollBody: {
+    padding: 20,
+  },
+  ticketCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  ticketTop: {
+    padding: 20,
+    backgroundColor: '#F0F9FF',
+    alignItems: 'center',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    marginBottom: 10,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#065F46',
+    letterSpacing: 0.5,
+  },
+  roomName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  notchDividerWrapper: {
+    position: 'relative',
+    height: 24,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  notch: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    zIndex: 2,
+  },
+  notchLeft: {
+    left: -12,
+  },
+  notchRight: {
+    right: -12,
+  },
+  dashedLine: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    marginHorizontal: 16,
+  },
+  qrSection: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+  },
+  qrWrapper: {
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginBottom: 12,
+  },
+  qrLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  qrLabelText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  qrInstruction: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  ticketBottom: {
+    padding: 18,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  detailCol: {
+    flex: 1,
+  },
+  detailLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  highlightSlot: {
+    color: '#2563EB',
+  },
+  dividerInner: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 12,
+  },
+  actionButtons: {
+    marginTop: 20,
+    gap: 12,
+  },
+  doneButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  doneButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  cancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+});
+
+
+
+
+================================================
+FILE: src/components/DateSelector.tsx
+================================================
+import React from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { generateNext7Days, DayOption } from '../utils/dateUtils';
+import { Calendar } from 'lucide-react-native';
+
+interface DateSelectorProps {
+  selectedDate: string; // YYYY-MM-DD
+  onSelectDate: (date: string) => void;
+}
+
+export const DateSelector: React.FC<DateSelectorProps> = ({
+  selectedDate,
+  onSelectDate,
+}) => {
+  const next7Days = React.useMemo(() => generateNext7Days(), []);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <View style={styles.titleGroup}>
+          <Calendar size={18} color="#2563EB" />
+          <Text style={styles.title}>Chọn ngày đặt phòng</Text>
+        </View>
+        <Text style={styles.subtitle}>7 ngày tới</Text>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {next7Days.map((item: DayOption) => {
+          const isSelected = item.dateString === selectedDate;
+          return (
+            <TouchableOpacity
+              key={item.dateString}
+              onPress={() => onSelectDate(item.dateString)}
+              activeOpacity={0.75}
+              style={[
+                styles.dayCard,
+                isSelected && styles.dayCardSelected,
+                item.isToday && !isSelected && styles.dayCardToday,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.dayName,
+                  isSelected && styles.dayNameSelected,
+                  item.isToday && !isSelected && styles.dayNameToday,
+                ]}
+              >
+                {item.dayName}
+              </Text>
+              <Text
+                style={[
+                  styles.dayNumber,
+                  isSelected && styles.dayNumberSelected,
+                ]}
+              >
+                {item.dayNumber}
+              </Text>
+              <Text
+                style={[
+                  styles.monthText,
+                  isSelected && styles.monthTextSelected,
+                ]}
+              >
+                Tháng {item.monthNumber}
+              </Text>
+
+              {item.isToday && (
+                <View
+                  style={[
+                    styles.todayDot,
+                    isSelected && styles.todayDotSelected,
+                  ]}
+                />
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    marginVertical: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  titleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  dayCard: {
+    width: 68,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    position: 'relative',
+  },
+  dayCardToday: {
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+  },
+  dayCardSelected: {
+    backgroundColor: '#2563EB',
+    borderColor: '#1D4ED8',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  dayName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  dayNameToday: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  dayNameSelected: {
+    color: '#DBEAFE',
+  },
+  dayNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  dayNumberSelected: {
+    color: '#FFFFFF',
+  },
+  monthText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  monthTextSelected: {
+    color: '#BFDBFE',
+  },
+  todayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#2563EB',
+    position: 'absolute',
+    bottom: 6,
+  },
+  todayDotSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+});
+
+
+
+
+================================================
+FILE: src/components/FilterChips.tsx
+================================================
+import React from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { BuildingCode, EquipmentType } from '../types';
+import { useBookingStore } from '../store/useBookingStore';
+import { X, SlidersHorizontal } from 'lucide-react-native';
+
+const BUILDINGS: BuildingCode[] = ['All', 'A', 'B', 'C', 'V'];
+
+const CAPACITY_OPTIONS: { label: string; value: 'all' | 'small' | 'medium' | 'large' }[] = [
+  { label: 'Tất cả sức chứa', value: 'all' },
+  { label: '< 6 chỗ (Nhóm nhỏ)', value: 'small' },
+  { label: '6 - 10 chỗ (Vừa)', value: 'medium' },
+  { label: '> 10 chỗ (Hội thảo)', value: 'large' },
+];
+
+const POPULAR_EQUIPMENT: EquipmentType[] = [
+  'Projector',
+  'Smart TV',
+  'Whiteboard',
+  'High-Speed LAN',
+  'Air Conditioner',
+  'Sound System',
+];
+
+export const FilterChips: React.FC = () => {
+  const filters = useBookingStore((state) => state.filters);
+  const setFilter = useBookingStore((state) => state.setFilter);
+  const resetFilters = useBookingStore((state) => state.resetFilters);
+  const toggleEquipment = useBookingStore((state) => state.toggleEquipmentFilter);
+
+  const hasActiveFilters =
+    filters.building !== 'All' ||
+    filters.capacityCategory !== 'all' ||
+    filters.equipment.length > 0 ||
+    filters.searchQuery !== '';
+
+  return (
+    <View style={styles.container}>
+      {/* Buildings Bar */}
+      <View style={styles.rowWrapper}>
+        <Text style={styles.sectionLabel}>Tòa nhà:</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollList}
+        >
+          {BUILDINGS.map((b) => {
+            const isSelected = filters.building === b;
+            return (
+              <TouchableOpacity
+                key={b}
+                onPress={() => setFilter({ building: b })}
+                activeOpacity={0.7}
+                style={[styles.chip, isSelected && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                  {b === 'All' ? 'Tất cả tòa' : `Tòa ${b}`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Capacity & Equipment Filter Bar */}
+      <View style={styles.rowWrapper}>
+        <Text style={styles.sectionLabel}>Sức chứa:</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollList}
+        >
+          {CAPACITY_OPTIONS.map((cap) => {
+            const isSelected = filters.capacityCategory === cap.value;
+            return (
+              <TouchableOpacity
+                key={cap.value}
+                onPress={() => setFilter({ capacityCategory: cap.value })}
+                activeOpacity={0.7}
+                style={[styles.chip, isSelected && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                  {cap.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Equipment Badges Scroll */}
+      <View style={styles.rowWrapper}>
+        <Text style={styles.sectionLabel}>Tiện ích:</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollList}
+        >
+          {POPULAR_EQUIPMENT.map((eq) => {
+            const isSelected = filters.equipment.includes(eq);
+            return (
+              <TouchableOpacity
+                key={eq}
+                onPress={() => toggleEquipment(eq)}
+                activeOpacity={0.7}
+                style={[styles.chip, isSelected && styles.chipActiveEquipment]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    isSelected && styles.chipTextActiveEquipment,
+                  ]}
+                >
+                  {eq}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {hasActiveFilters && (
+            <TouchableOpacity
+              onPress={resetFilters}
+              activeOpacity={0.7}
+              style={styles.resetButton}
+            >
+              <X size={14} color="#EF4444" />
+              <Text style={styles.resetText}>Xóa lọc</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    paddingVertical: 8,
+    gap: 8,
+  },
+  rowWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+    width: 68,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  scrollList: {
+    gap: 8,
+    alignItems: 'center',
+    paddingRight: 16,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  chipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#1D4ED8',
+  },
+  chipActiveEquipment: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  chipText: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  chipTextActiveEquipment: {
+    color: '#4F46E5',
+    fontWeight: '700',
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  resetText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+});
+
+
+
+
+================================================
+FILE: src/components/RoomCard.tsx
+================================================
+import React from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { Room } from '../types';
+import {
+  Users,
+  Building2,
+  Layers,
+  ChevronRight,
+  Tv,
+  Projector,
+  Wifi,
+  Wind,
+  CheckCircle2,
+} from 'lucide-react-native';
+
+interface RoomCardProps {
+  room: Room;
+  onPress: (roomId: string) => void;
+}
+
+const getBuildingTheme = (building: string) => {
+  switch (building) {
+    case 'A':
+      return { bg: '#DBEAFE', text: '#1E40AF', border: '#BFDBFE' };
+    case 'B':
+      return { bg: '#DCFCE7', text: '#166534', border: '#BBF7D0' };
+    case 'C':
+      return { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' };
+    case 'V':
+      return { bg: '#EDE9FE', text: '#5B21B6', border: '#DDD6FE' };
+    default:
+      return { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0' };
+  }
+};
+
+const renderEquipmentIcon = (item: string) => {
+  switch (item) {
+    case 'Projector':
+      return <Projector key={item} size={14} color="#475569" />;
+    case 'Smart TV':
+      return <Tv key={item} size={14} color="#475569" />;
+    case 'High-Speed LAN':
+      return <Wifi key={item} size={14} color="#475569" />;
+    case 'Air Conditioner':
+      return <Wind key={item} size={14} color="#475569" />;
+    default:
+      return null;
+  }
+};
+
+export const RoomCard: React.FC<RoomCardProps> = React.memo(
+  ({ room, onPress }) => {
+    const buildingTheme = getBuildingTheme(room.building);
+
+    return (
+      <TouchableOpacity
+        style={styles.cardContainer}
+        onPress={() => onPress(room.id)}
+        activeOpacity={0.88}
+      >
+        {/* Room Photo */}
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{ uri: room.image }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+          {/* Building Badge overlay */}
+          <View
+            style={[
+              styles.buildingBadge,
+              {
+                backgroundColor: buildingTheme.bg,
+                borderColor: buildingTheme.border,
+              },
+            ]}
+          >
+            <Building2 size={12} color={buildingTheme.text} />
+            <Text style={[styles.buildingText, { color: buildingTheme.text }]}>
+              Tòa {room.building} • Tầng {room.floor}
+            </Text>
+          </View>
+
+          {/* Status Badge */}
+          <View style={styles.statusBadge}>
+            <CheckCircle2 size={12} color="#10B981" />
+            <Text style={styles.statusText}>Sẵn sàng</Text>
+          </View>
+        </View>
+
+        {/* Card Body Info */}
+        <View style={styles.content}>
+          <View style={styles.headerRow}>
+            <View style={styles.codeContainer}>
+              <Text style={styles.roomCode}>{room.code}</Text>
+              <Text style={styles.roomName} numberOfLines={1}>
+                {room.name}
+              </Text>
+            </View>
+            <ChevronRight size={20} color="#94A3B8" />
+          </View>
+
+          <Text style={styles.description} numberOfLines={2}>
+            {room.description}
+          </Text>
+
+          {/* Stats Bar */}
+          <View style={styles.footerRow}>
+            <View style={styles.specItem}>
+              <Users size={15} color="#2563EB" />
+              <Text style={styles.specText}>{room.capacity} Chỗ ngồi</Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.specItem}>
+              <Layers size={15} color="#64748B" />
+              <Text style={styles.specText}>Phòng {room.code}</Text>
+            </View>
+
+            <View style={styles.equipmentIcons}>
+              {room.equipment.slice(0, 3).map((eq) => (
+                <View key={eq} style={styles.iconCircle}>
+                  {renderEquipmentIcon(eq)}
+                </View>
+              ))}
+              {room.equipment.length > 3 && (
+                <Text style={styles.moreEquip}>+{room.equipment.length - 3}</Text>
+              )}
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  },
+  (prev, next) => prev.room.id === next.room.id && prev.room.status === next.room.status
+);
+
+export const ROOM_CARD_HEIGHT = 295; // Used for FlatList getItemLayout optimization
+
+const styles = StyleSheet.create({
+  cardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  imageWrapper: {
+    width: '100%',
+    height: 155,
+    position: 'relative',
+    backgroundColor: '#E2E8F0',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  buildingBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  buildingText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#065F46',
+  },
+  content: {
+    padding: 14,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  codeContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  roomCode: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2563EB',
+    textTransform: 'uppercase',
+  },
+  roomName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 1,
+  },
+  description: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+    paddingTop: 10,
+  },
+  specItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  specText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  divider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 10,
+  },
+  equipmentIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+    gap: 6,
+  },
+  iconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  moreEquip: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+});
+
+
+
+
+================================================
+FILE: src/components/TimeSlotPicker.tsx
+================================================
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
+import { TimeSlot } from '../types';
+import { STANDARD_TIME_SLOTS } from '../utils/mockData';
+import { useBookingStore } from '../store/useBookingStore';
+import { isSlotInPast } from '../utils/dateUtils';
+import { Clock, Lock, Check, AlertCircle } from 'lucide-react-native';
+
+interface TimeSlotPickerProps {
+  roomId: string;
+  selectedDate: string; // YYYY-MM-DD
+  selectedSlot: TimeSlot | null;
+  onSelectSlot: (slot: TimeSlot) => void;
+}
+
+export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
+  roomId,
+  selectedDate,
+  selectedSlot,
+  onSelectSlot,
+}) => {
+  const isSlotBooked = useBookingStore((state) => state.isSlotBooked);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <View style={styles.titleGroup}>
+          <Clock size={18} color="#2563EB" />
+          <Text style={styles.title}>Khung giờ học khả dụng (2h/ca)</Text>
+        </View>
+        <Text style={styles.badgeInfo}>
+          {STANDARD_TIME_SLOTS.length} ca trong ngày
+        </Text>
+      </View>
+
+      <View style={styles.grid}>
+        {STANDARD_TIME_SLOTS.map((slot) => {
+          const booked = isSlotBooked(roomId, selectedDate, slot.startTime);
+          const past = isSlotInPast(selectedDate, slot.startTime);
+          const disabled = booked || past;
+          const isSelected = selectedSlot?.id === slot.id && !disabled;
+
+          let statusLabel = 'Còn trống';
+          if (booked) {
+            statusLabel = 'Đã đặt';
+          } else if (past) {
+            statusLabel = 'Đã qua';
+          }
+
+          return (
+            <TouchableOpacity
+              key={slot.id}
+              disabled={disabled}
+              onPress={() => onSelectSlot(slot)}
+              activeOpacity={0.7}
+              style={[
+                styles.slotButton,
+                disabled && styles.slotButtonDisabled,
+                booked && styles.slotButtonBooked,
+                isSelected && styles.slotButtonSelected,
+              ]}
+            >
+              {/* Slot Time Header */}
+              <View style={styles.slotHeader}>
+                <Text
+                  style={[
+                    styles.slotTimeText,
+                    disabled && styles.slotTextDisabled,
+                    isSelected && styles.slotTextSelected,
+                  ]}
+                >
+                  {slot.startTime} – {slot.endTime}
+                </Text>
+
+                {isSelected ? (
+                  <View style={styles.selectedIcon}>
+                    <Check size={13} color="#FFFFFF" strokeWidth={3} />
+                  </View>
+                ) : booked ? (
+                  <Lock size={13} color="#EF4444" />
+                ) : past ? (
+                  <AlertCircle size={13} color="#94A3B8" />
+                ) : (
+                  <View style={styles.availableDot} />
+                )}
+              </View>
+
+              {/* Status Badge */}
+              <View
+                style={[
+                  styles.statusBadge,
+                  disabled && styles.statusBadgeDisabled,
+                  booked && styles.statusBadgeBooked,
+                  isSelected && styles.statusBadgeSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    disabled && styles.statusTextDisabled,
+                    booked && styles.statusTextBooked,
+                    isSelected && styles.statusTextSelected,
+                  ]}
+                >
+                  {statusLabel}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Legend */}
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+          <Text style={styles.legendText}>Còn trống</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+          <Text style={styles.legendText}>Đã có người đặt</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: '#2563EB' }]} />
+          <Text style={styles.legendText}>Đang chọn</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    paddingHorizontal: 20,
+    marginVertical: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  titleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  badgeInfo: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  slotButton: {
+    width: '48.5%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  slotButtonDisabled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    opacity: 0.75,
+  },
+  slotButtonBooked: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    opacity: 0.9,
+  },
+  slotButtonSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  slotHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  slotTimeText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  slotTextDisabled: {
+    color: '#94A3B8',
+  },
+  slotTextSelected: {
+    color: '#1D4ED8',
+  },
+  availableDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  selectedIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#ECFDF5',
+  },
+  statusBadgeDisabled: {
+    backgroundColor: '#F1F5F9',
+  },
+  statusBadgeBooked: {
+    backgroundColor: '#FEE2E2',
+  },
+  statusBadgeSelected: {
+    backgroundColor: '#DBEAFE',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  statusTextDisabled: {
+    color: '#64748B',
+  },
+  statusTextBooked: {
+    color: '#DC2626',
+  },
+  statusTextSelected: {
+    color: '#1E40AF',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 14,
+    paddingVertical: 6,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+});
+
+
+
+
+================================================
+FILE: src/navigation/AppNavigator.tsx
+================================================
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types';
+import { HomeScreen } from '../screens/HomeScreen';
+import { RoomDetailScreen } from '../screens/RoomDetailScreen';
+import { MyBookingsScreen } from '../screens/MyBookingsScreen';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+export const AppNavigator: React.FC = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: '#F8FAFC' },
+        }}
+      >
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="RoomDetail" component={RoomDetailScreen} />
+        <Stack.Screen name="MyBookings" component={MyBookingsScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
+
+
+
+================================================
+FILE: src/screens/HomeScreen.tsx
+================================================
+import React, { useCallback, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList, Room } from '../types';
+import { useBookingStore } from '../store/useBookingStore';
+import { FilterChips } from '../components/FilterChips';
+import { RoomCard, ROOM_CARD_HEIGHT } from '../components/RoomCard';
+import {
+  Search,
+  X,
+  Ticket,
+  Sparkles,
+  Building,
+} from 'lucide-react-native';
+
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+interface HomeScreenProps {
+  navigation: HomeScreenNavigationProp;
+}
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
+  const user = useBookingStore((state) => state.userSession);
+  const bookings = useBookingStore((state) => state.bookings);
+  const filters = useBookingStore((state) => state.filters);
+  const setFilter = useBookingStore((state) => state.setFilter);
+  const resetFilters = useBookingStore((state) => state.resetFilters);
+  const getFilteredRooms = useBookingStore((state) => state.getFilteredRooms);
+
+  // Active user bookings count
+  const activeBookingsCount = useMemo(
+    () =>
+      bookings.filter((b) => b.userId === user.id && b.status === 'confirmed').length,
+    [bookings, user.id]
+  );
+
+  // Compute filtered rooms list
+  const filteredRooms = getFilteredRooms();
+
+  const handleRoomPress = useCallback(
+    (roomId: string) => {
+      navigation.navigate('RoomDetail', { roomId });
+    },
+    [navigation]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Room }) => {
+      return <RoomCard room={item} onPress={handleRoomPress} />;
+    },
+    [handleRoomPress]
+  );
+
+  const keyExtractor = useCallback((item: Room) => item.id, []);
+
+  // Performance-optimized layout calculation for FlatList (60fps scrolling)
+  const getItemLayout = useCallback(
+    (_: any, index: number) => ({
+      length: ROOM_CARD_HEIGHT + 16,
+      offset: (ROOM_CARD_HEIGHT + 16) * index,
+      index,
+    }),
+    []
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Top Header Bar */}
+      <View style={styles.headerBar}>
+        <View style={styles.userProfile}>
+          {user.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarText}>
+                {user.name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.greetingContainer}>
+            <View style={styles.greetingTitleRow}>
+              <Text style={styles.greetingText}>Xin chào,</Text>
+              <Text style={styles.userName}>{user.name}</Text>
+            </View>
+            <Text style={styles.studentIdBadge}>
+              VKU • {user.studentId}
+            </Text>
+          </View>
+        </View>
+
+        {/* My Bookings Ticket Button */}
+        <TouchableOpacity
+          style={styles.myBookingsBtn}
+          onPress={() => navigation.navigate('MyBookings')}
+          activeOpacity={0.8}
+        >
+          <Ticket size={20} color="#2563EB" />
+          {activeBookingsCount > 0 && (
+            <View style={styles.badgeCount}>
+              <Text style={styles.badgeCountText}>{activeBookingsCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Input */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Search size={18} color="#64748B" style={styles.searchIcon} />
+          <TextInput
+            placeholder="Tìm theo mã phòng, tên phòng (A.101, Lab...)"
+            placeholderTextColor="#94A3B8"
+            value={filters.searchQuery}
+            onChangeText={(text) => setFilter({ searchQuery: text })}
+            style={styles.searchInput}
+            clearButtonMode="while-editing"
+          />
+          {filters.searchQuery.length > 0 && Platform.OS !== 'ios' && (
+            <TouchableOpacity
+              onPress={() => setFilter({ searchQuery: '' })}
+              style={styles.clearSearchBtn}
+            >
+              <X size={16} color="#64748B" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Filter Chips Component */}
+      <FilterChips />
+
+      {/* Section Subtitle */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleRow}>
+          <Sparkles size={16} color="#2563EB" />
+          <Text style={styles.sectionTitle}>Danh sách phòng học VKU</Text>
+        </View>
+        <Text style={styles.roomCountText}>
+          {filteredRooms.length} phòng khả dụng
+        </Text>
+      </View>
+
+      {/* Optimized FlatList */}
+      <FlatList
+        data={filteredRooms}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Building size={48} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>Không tìm thấy phòng phù hợp</Text>
+            <Text style={styles.emptySubtitle}>
+              Hãy thử chọn tòa nhà khác hoặc bỏ bớt tiêu chí lọc tiện ích.
+            </Text>
+            <TouchableOpacity
+              style={styles.resetBtn}
+              onPress={resetFilters}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.resetBtnText}>Đặt lại bộ lọc</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 8 : 16,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  userProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+  },
+  avatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  greetingContainer: {
+    justifyContent: 'center',
+  },
+  greetingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  greetingText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  studentIdBadge: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  myBookingsBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  badgeCount: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    backgroundColor: '#EF4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  badgeCountText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  roomCountText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  listContent: {
+    paddingBottom: 24,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  resetBtn: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+  },
+  resetBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});
+
+
+
+
+================================================
+FILE: src/screens/MyBookingsScreen.tsx
+================================================
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList, Booking } from '../types';
+import { useBookingStore } from '../store/useBookingStore';
+import { BookingPassModal } from '../components/BookingPassModal';
+import { formatDisplayDate } from '../utils/dateUtils';
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  MapPin,
+  QrCode,
+  AlertTriangle,
+  Inbox,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react-native';
+
+type MyBookingsScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'MyBookings'
+>;
+
+export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({
+  navigation,
+}) => {
+  const bookings = useBookingStore((state) => state.bookings);
+  const user = useBookingStore((state) => state.userSession);
+  const cancelBooking = useBookingStore((state) => state.cancelBooking);
+
+  // Selected tab: upcoming or history
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+
+  // Modal pass preview
+  const [selectedPass, setSelectedPass] = useState<Booking | null>(null);
+  const [passModalVisible, setPassModalVisible] = useState<boolean>(false);
+
+  // Filter student's bookings
+  const userBookings = useMemo(
+    () => bookings.filter((b) => b.userId === user.id),
+    [bookings, user.id]
+  );
+
+  const displayedBookings = useMemo(() => {
+    if (activeTab === 'upcoming') {
+      return userBookings.filter((b) => b.status === 'confirmed');
+    }
+    return userBookings.filter((b) => b.status !== 'confirmed');
+  }, [userBookings, activeTab]);
+
+  const handleOpenPass = (booking: Booking) => {
+    setSelectedPass(booking);
+    setPassModalVisible(true);
+  };
+
+  const handleCancel = (booking: Booking) => {
+    Alert.alert(
+      'Hủy lịch đặt phòng',
+      `Bạn có chắc muốn hủy lịch tại ${booking.roomName} (${booking.timeSlot.label})?`,
+      [
+        { text: 'Giữ lại', style: 'cancel' },
+        {
+          text: 'Hủy lịch',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelBooking(booking.id);
+            if (res.success) {
+              Alert.alert('Thành công', 'Đã hủy lịch đặt phòng và giải phóng ca học.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const renderBookingItem = ({ item }: { item: Booking }) => {
+    const isUpcoming = item.status === 'confirmed';
+
+    return (
+      <View style={styles.bookingCard}>
+        {/* Top Card Header */}
+        <View style={styles.cardHeader}>
+          <View style={styles.roomInfoCol}>
+            <Text style={styles.cardRoomName}>{item.roomName}</Text>
+            <View style={styles.locationTag}>
+              <MapPin size={13} color="#2563EB" />
+              <Text style={styles.locationTagText}>
+                Tòa {item.building} • Tầng {item.floor}
+              </Text>
+            </View>
+          </View>
+
+          {/* Status Badge */}
+          <View
+            style={[
+              styles.statusBadge,
+              isUpcoming ? styles.statusConfirmed : styles.statusCancelled,
+            ]}
+          >
+            {isUpcoming ? (
+              <>
+                <CheckCircle2 size={12} color="#059669" />
+                <Text style={styles.statusConfirmedText}>Đã xác nhận</Text>
+              </>
+            ) : (
+              <>
+                <XCircle size={12} color="#DC2626" />
+                <Text style={styles.statusCancelledText}>Đã hủy</Text>
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* Date & Time Slot Block */}
+        <View style={styles.scheduleRow}>
+          <View style={styles.scheduleCol}>
+            <View style={styles.scheduleItem}>
+              <Calendar size={14} color="#64748B" />
+              <Text style={styles.scheduleText}>{formatDisplayDate(item.date)}</Text>
+            </View>
+            <View style={styles.scheduleItem}>
+              <Clock size={14} color="#2563EB" />
+              <Text style={[styles.scheduleText, styles.slotHighlight]}>
+                {item.timeSlot.label}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Card Footer Actions */}
+        <View style={styles.cardFooter}>
+          {isUpcoming ? (
+            <>
+              <TouchableOpacity
+                style={styles.qrPassBtn}
+                onPress={() => handleOpenPass(item)}
+                activeOpacity={0.8}
+              >
+                <QrCode size={16} color="#FFFFFF" />
+                <Text style={styles.qrPassBtnText}>Mở thẻ QR Check-in</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => handleCancel(item)}
+                activeOpacity={0.7}
+              >
+                <AlertTriangle size={15} color="#EF4444" />
+                <Text style={styles.cancelBtnText}>Hủy lịch</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.cancelledNote}>
+              Lịch đặt này đã bị hủy và khung giờ đã được hoàn lại.
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Top Header */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
+        >
+          <ArrowLeft size={20} color="#0F172A" />
+        </TouchableOpacity>
+
+        <Text style={styles.headerTitle}>Lịch Đặt Phòng Của Tôi</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabsWrapper}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'upcoming' && styles.tabActive]}
+          onPress={() => setActiveTab('upcoming')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'upcoming' && styles.tabTextActive,
+            ]}
+          >
+            Sắp tới ({userBookings.filter((b) => b.status === 'confirmed').length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.tabActive]}
+          onPress={() => setActiveTab('history')}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'history' && styles.tabTextActive,
+            ]}
+          >
+            Lịch sử ({userBookings.filter((b) => b.status !== 'confirmed').length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bookings List */}
+      <FlatList
+        data={displayedBookings}
+        renderItem={renderBookingItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Inbox size={48} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>
+              {activeTab === 'upcoming'
+                ? 'Bạn chưa có lịch đặt phòng nào sắp tới'
+                : 'Chưa có lịch sử đặt phòng nào'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {activeTab === 'upcoming'
+                ? 'Tìm phòng học lý tưởng và đặt trước ca học 2 tiếng ngay bây giờ.'
+                : 'Các ca học đã hoàn thành hoặc hủy sẽ xuất hiện tại đây.'}
+            </Text>
+
+            {activeTab === 'upcoming' && (
+              <TouchableOpacity
+                style={styles.exploreBtn}
+                onPress={() => navigation.navigate('Home')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.exploreBtnText}>Tìm phòng ngay</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+      />
+
+      {/* QR Modal */}
+      <BookingPassModal
+        visible={passModalVisible}
+        booking={selectedPass}
+        onClose={() => setPassModalVisible(false)}
+        onCancelBooking={async (bookingId) => {
+          await cancelBooking(bookingId);
+        }}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  tabsWrapper: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  tabTextActive: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  bookingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  roomInfoCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  cardRoomName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  locationTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  locationTagText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusConfirmed: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  statusConfirmedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857',
+  },
+  statusCancelled: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  statusCancelledText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  scheduleRow: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  scheduleCol: {
+    gap: 6,
+  },
+  scheduleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scheduleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  slotHighlight: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 12,
+  },
+  qrPassBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 10,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  qrPassBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  cancelBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  cancelledNote: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 12.5,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  exploreBtn: {
+    marginTop: 18,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  exploreBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+});
+
+
+
+
+================================================
+FILE: src/screens/RoomDetailScreen.tsx
+================================================
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList, TimeSlot, Booking } from '../types';
+import { useBookingStore } from '../store/useBookingStore';
+import { DateSelector } from '../components/DateSelector';
+import { TimeSlotPicker } from '../components/TimeSlotPicker';
+import { BookingPassModal } from '../components/BookingPassModal';
+import { formatDisplayDate } from '../utils/dateUtils';
+import {
+  ArrowLeft,
+  Users,
+  Building2,
+  Layers,
+  CheckCircle2,
+  Sun,
+  Wifi,
+  Tv,
+  Projector,
+  Wind,
+  Volume2,
+  Zap,
+  Mic,
+  CalendarCheck,
+  ShieldAlert,
+} from 'lucide-react-native';
+
+type RoomDetailScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'RoomDetail'
+>;
+
+const getEquipmentIcon = (name: string) => {
+  switch (name) {
+    case 'Projector':
+      return <Projector size={16} color="#2563EB" />;
+    case 'Smart TV':
+      return <Tv size={16} color="#2563EB" />;
+    case 'High-Speed LAN':
+      return <Wifi size={16} color="#2563EB" />;
+    case 'Air Conditioner':
+      return <Wind size={16} color="#2563EB" />;
+    case 'Sound System':
+      return <Volume2 size={16} color="#2563EB" />;
+    case 'Power Outlets':
+      return <Zap size={16} color="#2563EB" />;
+    case 'Conference Mic':
+      return <Mic size={16} color="#2563EB" />;
+    default:
+      return <CheckCircle2 size={16} color="#2563EB" />;
+  }
+};
+
+export const RoomDetailScreen: React.FC<RoomDetailScreenProps> = ({
+  route,
+  navigation,
+}) => {
+  const { roomId } = route.params;
+
+  // Store access
+  const room = useBookingStore((state) => state.getRoomById(roomId));
+  const bookRoom = useBookingStore((state) => state.bookRoom);
+  const cancelBooking = useBookingStore((state) => state.cancelBooking);
+  const isSlotBooked = useBookingStore((state) => state.isSlotBooked);
+
+  // Local interaction state
+  const todayString = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const [selectedDate, setSelectedDate] = useState<string>(todayString);
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Pass Modal state
+  const [passModalVisible, setPassModalVisible] = useState<boolean>(false);
+  const [currentBooking, setCurrentBooking] = useState<Booking | null>(null);
+
+  if (!room) {
+    return (
+      <View style={styles.notFoundContainer}>
+        <Text style={styles.notFoundText}>Không tìm thấy phòng học.</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backBtnText}>Quay lại danh sách</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    // If selected slot is already booked on the newly selected date, reset selection
+    if (selectedSlot && isSlotBooked(room.id, newDate, selectedSlot.startTime)) {
+      setSelectedSlot(null);
+    }
+  };
+
+  const handleBookingConfirm = async () => {
+    if (!selectedSlot) {
+      Alert.alert('Chưa chọn khung giờ', 'Vui lòng chọn 1 khung giờ học 2 tiếng khả dụng.');
+      return;
+    }
+
+    // Atomic conflict verification
+    if (isSlotBooked(room.id, selectedDate, selectedSlot.startTime)) {
+      Alert.alert(
+        'Khung giờ đã bị trùng!',
+        `Khung giờ ${selectedSlot.label} vào ngày này vừa được người khác đặt. Vui lòng chọn ca học khác.`
+      );
+      setSelectedSlot(null);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await bookRoom(room.id, selectedDate, selectedSlot);
+
+      if (result.success && result.booking) {
+        setCurrentBooking(result.booking);
+        setPassModalVisible(true);
+        setSelectedSlot(null); // Reset selection
+      } else {
+        Alert.alert('Lỗi đặt phòng', result.error || 'Có lỗi xảy ra, vui lòng thử lại.');
+      }
+    } catch (err: any) {
+      Alert.alert('Lỗi hệ thống', err.message || 'Không thể hoàn tất đặt phòng.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Scrollable Content */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Room Hero Image */}
+        <View style={styles.heroImageContainer}>
+          <Image source={{ uri: room.image }} style={styles.heroImage} />
+
+          {/* Top floating back button */}
+          <TouchableOpacity
+            style={styles.floatingBackBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <ArrowLeft size={20} color="#0F172A" />
+          </TouchableOpacity>
+
+          {/* Floating Building pill */}
+          <View style={styles.buildingTag}>
+            <Building2 size={13} color="#FFFFFF" />
+            <Text style={styles.buildingTagText}>
+              Tòa {room.building} • Tầng {room.floor}
+            </Text>
+          </View>
+        </View>
+
+        {/* Room Header Info */}
+        <View style={styles.roomHeaderSection}>
+          <View style={styles.roomTitleRow}>
+            <View style={styles.codeBadge}>
+              <Text style={styles.codeBadgeText}>{room.code}</Text>
+            </View>
+            <View style={styles.roomTitleCol}>
+              <Text style={styles.roomNameText}>{room.name}</Text>
+              <Text style={styles.campusSubtitle}>
+                Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU)
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.descriptionText}>{room.description}</Text>
+
+          {/* Spec Cards Row */}
+          <View style={styles.specCardsRow}>
+            <View style={styles.specCard}>
+              <Users size={20} color="#2563EB" />
+              <Text style={styles.specValue}>{room.capacity} Người</Text>
+              <Text style={styles.specLabel}>Sức chứa tối đa</Text>
+            </View>
+
+            <View style={styles.specCard}>
+              <Layers size={20} color="#059669" />
+              <Text style={styles.specValue}>Tầng {room.floor}</Text>
+              <Text style={styles.specLabel}>Vị trí tầng</Text>
+            </View>
+
+            <View style={styles.specCard}>
+              <Sun size={20} color="#D97706" />
+              <Text style={styles.specValue}>{room.lightingType || 'Tự nhiên'}</Text>
+              <Text style={styles.specLabel}>Ánh sáng</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Equipment Badges Section */}
+        <View style={styles.sectionBlock}>
+          <Text style={styles.blockTitle}>Trang thiết bị & Tiện nghi</Text>
+          <View style={styles.equipmentGrid}>
+            {room.equipment.map((item) => (
+              <View key={item} style={styles.equipmentItem}>
+                <View style={styles.equipIconBox}>{getEquipmentIcon(item)}</View>
+                <Text style={styles.equipText}>{item}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* 7-Day Interactive Date Selector */}
+        <View style={styles.sectionBlock}>
+          <DateSelector
+            selectedDate={selectedDate}
+            onSelectDate={handleDateChange}
+          />
+        </View>
+
+        {/* Discrete 2-Hour Time Slots with conflict lock */}
+        <View style={styles.sectionBlock}>
+          <TimeSlotPicker
+            roomId={room.id}
+            selectedDate={selectedDate}
+            selectedSlot={selectedSlot}
+            onSelectSlot={setSelectedSlot}
+          />
+        </View>
+
+        {/* Conflict Notice Info Box */}
+        <View style={styles.noticeBox}>
+          <ShieldAlert size={18} color="#2563EB" />
+          <Text style={styles.noticeText}>
+            Hệ thống áp dụng cơ chế tự động chống xung đột lịch (Conflict Prevention).
+            Mỗi phiên học cố định 2 giờ và yêu cầu quét QR check-in đúng giờ.
+          </Text>
+        </View>
+      </ScrollView>
+
+      {/* Bottom Booking Action Bar */}
+      <View style={styles.bottomBar}>
+        <View style={styles.summaryCol}>
+          <Text style={styles.summaryDateLabel}>
+            {formatDisplayDate(selectedDate)}
+          </Text>
+          <Text style={styles.summarySlotValue}>
+            {selectedSlot ? selectedSlot.label : 'Chưa chọn ca học'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.confirmBookingBtn,
+            (!selectedSlot || isSubmitting) && styles.confirmBookingBtnDisabled,
+          ]}
+          disabled={!selectedSlot || isSubmitting}
+          onPress={handleBookingConfirm}
+          activeOpacity={0.85}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <CalendarCheck size={18} color="#FFFFFF" />
+              <Text style={styles.confirmBtnText}>Xác nhận đặt</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Booking Pass Modal */}
+      <BookingPassModal
+        visible={passModalVisible}
+        booking={currentBooking}
+        onClose={() => {
+          setPassModalVisible(false);
+          navigation.navigate('MyBookings');
+        }}
+        onCancelBooking={async (bookingId) => {
+          await cancelBooking(bookingId);
+        }}
+      />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  scrollContent: {
+    paddingBottom: 110,
+  },
+  heroImageContainer: {
+    width: '100%',
+    height: 240,
+    position: 'relative',
+    backgroundColor: '#CBD5E1',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  floatingBackBtn: {
+    position: 'absolute',
+    top: 24,
+    left: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  buildingTag: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  buildingTagText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  roomHeaderSection: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  roomTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  codeBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  codeBadgeText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1D4ED8',
+  },
+  roomTitleCol: {
+    flex: 1,
+  },
+  roomNameText: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  campusSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  descriptionText: {
+    fontSize: 13.5,
+    color: '#475569',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  specCardsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingBottom: 18,
+  },
+  specCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  specValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 6,
+  },
+  specLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  sectionBlock: {
+    marginTop: 8,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  blockTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  equipmentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  equipmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  equipIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  equipText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  noticeBox: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#EFF6FF',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'flex-start',
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1E40AF',
+    lineHeight: 17,
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  summaryCol: {
+    flex: 1,
+  },
+  summaryDateLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  summarySlotValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  confirmBookingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  confirmBookingBtnDisabled: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  confirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  notFoundContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  notFoundText: {
+    fontSize: 16,
+    color: '#64748B',
+    marginBottom: 16,
+  },
+  backBtn: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  backBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+});
+
+
+
+
+================================================
+FILE: src/store/useBookingStore.ts
+================================================
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Room,
+  TimeSlot,
+  Booking,
+  UserSession,
+  FilterState,
+  EquipmentType,
+  BuildingCode,
+} from '../types';
+import { CURRENT_USER, INITIAL_ROOMS, INITIAL_BOOKINGS } from '../utils/mockData';
+import { scheduleBookingReminder, cancelScheduledNotification } from '../utils/notifications';
+
+interface BookingStoreState {
+  // State
+  userSession: UserSession;
+  rooms: Room[];
+  bookings: Booking[];
+  filters: FilterState;
+
+  // Actions
+  setFilter: (partial: Partial<FilterState>) => void;
+  resetFilters: () => void;
+  toggleEquipmentFilter: (item: EquipmentType) => void;
+
+  // Conflict Engine & Booking Actions
+  isSlotBooked: (roomId: string, date: string, startTime: string) => boolean;
+  bookRoom: (
+    roomId: string,
+    date: string,
+    timeSlot: TimeSlot
+  ) => Promise<{ success: boolean; booking?: Booking; error?: string }>;
+  cancelBooking: (bookingId: string) => Promise<{ success: boolean; message: string }>;
+
+  // Getters & Selectors
+  getFilteredRooms: () => Room[];
+  getRoomById: (roomId: string) => Room | undefined;
+  getBookingById: (bookingId: string) => Booking | undefined;
+  getUserBookings: () => Booking[];
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  building: 'All',
+  capacityCategory: 'all',
+  equipment: [],
+  searchQuery: '',
+};
+
+export const useBookingStore = create<BookingStoreState>()(
+  persist(
+    (set, get) => ({
+      userSession: CURRENT_USER,
+      rooms: INITIAL_ROOMS,
+      bookings: INITIAL_BOOKINGS,
+      filters: DEFAULT_FILTERS,
+
+      setFilter: (partial) =>
+        set((state) => ({
+          filters: { ...state.filters, ...partial },
+        })),
+
+      resetFilters: () =>
+        set(() => ({
+          filters: DEFAULT_FILTERS,
+        })),
+
+      toggleEquipmentFilter: (item: EquipmentType) =>
+        set((state) => {
+          const exists = state.filters.equipment.includes(item);
+          return {
+            filters: {
+              ...state.filters,
+              equipment: exists
+                ? state.filters.equipment.filter((e) => e !== item)
+                : [...state.filters.equipment, item],
+            },
+          };
+        }),
+
+      /**
+       * CONFLICT PREVENTION ENGINE:
+       * Checks if the 2-hour slot for a specific room and date is already taken by a confirmed booking.
+       */
+      isSlotBooked: (roomId: string, date: string, startTime: string): boolean => {
+        const { bookings } = get();
+        return bookings.some(
+          (b) =>
+            b.roomId === roomId &&
+            b.date === date &&
+            b.timeSlot.startTime === startTime &&
+            b.status === 'confirmed'
+        );
+      },
+
+      /**
+       * Atomic booking transaction with conflict prevention
+       */
+      bookRoom: async (roomId: string, date: string, timeSlot: TimeSlot) => {
+        const state = get();
+        const room = state.rooms.find((r) => r.id === roomId);
+
+        if (!room) {
+          return { success: false, error: 'Không tìm thấy thông tin phòng học.' };
+        }
+
+        // 1. Conflict Prevention Check
+        const conflict = state.isSlotBooked(roomId, date, timeSlot.startTime);
+        if (conflict) {
+          return {
+            success: false,
+            error: `Khung giờ ${timeSlot.label} ngày ${date} tại ${room.name} đã được đặt trước bởi người khác!`,
+          };
+        }
+
+        // 2. Generate Unique Booking details & QR payload
+        const timestamp = Date.now();
+        const randomHash = Math.random().toString(36).substring(2, 7).toUpperCase();
+        const bookingId = `bkg_${timestamp}_${randomHash}`;
+
+        // QR Code payload containing verification JSON
+        const qrPayload = JSON.stringify({
+          ticketId: bookingId,
+          roomCode: room.code,
+          building: room.building,
+          floor: room.floor,
+          date,
+          slot: timeSlot.label,
+          studentId: state.userSession.studentId,
+          studentName: state.userSession.name,
+          issuedAt: new Date().toISOString(),
+        });
+
+        const newBooking: Booking = {
+          id: bookingId,
+          roomId: room.id,
+          roomName: room.name,
+          building: room.building,
+          floor: room.floor,
+          userId: state.userSession.id,
+          userName: state.userSession.name,
+          userStudentId: state.userSession.studentId,
+          date,
+          timeSlot,
+          qrCode: qrPayload,
+          createdAt: new Date().toISOString(),
+          status: 'confirmed',
+        };
+
+        // 3. Schedule 15-minute alert notification
+        try {
+          const notificationId = await scheduleBookingReminder(newBooking, room);
+          if (notificationId) {
+            newBooking.notificationId = notificationId;
+          }
+        } catch (notifErr) {
+          console.warn('Failed to schedule reminder:', notifErr);
+        }
+
+        // 4. Commit to Zustand state (persists into AsyncStorage)
+        set((prevState) => ({
+          bookings: [newBooking, ...prevState.bookings],
+        }));
+
+        return { success: true, booking: newBooking };
+      },
+
+      /**
+       * Cancel an active booking and cancel the scheduled notification
+       */
+      cancelBooking: async (bookingId: string) => {
+        const state = get();
+        const targetBooking = state.bookings.find((b) => b.id === bookingId);
+
+        if (!targetBooking) {
+          return { success: false, message: 'Không tìm thấy lịch đặt phòng.' };
+        }
+
+        // Cancel scheduled notification if attached
+        if (targetBooking.notificationId) {
+          await cancelScheduledNotification(targetBooking.notificationId);
+        }
+
+        // Update booking status to cancelled to free up the slot
+        set((prevState) => ({
+          bookings: prevState.bookings.map((b) =>
+            b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
+          ),
+        }));
+
+        return { success: true, message: 'Đã hủy lịch đặt phòng thành công.' };
+      },
+
+      /**
+       * High-performance filtered rooms selector
+       */
+      getFilteredRooms: (): Room[] => {
+        const { rooms, filters } = get();
+
+        return rooms.filter((room) => {
+          // Building filter
+          if (filters.building !== 'All' && room.building !== filters.building) {
+            return false;
+          }
+
+          // Capacity filter
+          if (filters.capacityCategory === 'small' && room.capacity >= 6) {
+            return false; // <6 seats
+          }
+          if (
+            filters.capacityCategory === 'medium' &&
+            (room.capacity < 6 || room.capacity > 10)
+          ) {
+            return false; // 6-10 seats
+          }
+          if (filters.capacityCategory === 'large' && room.capacity <= 10) {
+            return false; // >10 seats
+          }
+
+          // Equipment filter (must have all selected equipment)
+          if (
+            filters.equipment.length > 0 &&
+            !filters.equipment.every((eq) => room.equipment.includes(eq))
+          ) {
+            return false;
+          }
+
+          // Search query filter (search by room name, code, or description)
+          if (filters.searchQuery.trim() !== '') {
+            const query = filters.searchQuery.toLowerCase().trim();
+            const matchesName = room.name.toLowerCase().includes(query);
+            const matchesCode = room.code.toLowerCase().includes(query);
+            const matchesDesc = room.description.toLowerCase().includes(query);
+            if (!matchesName && !matchesCode && !matchesDesc) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+      },
+
+      getRoomById: (roomId: string) => {
+        return get().rooms.find((r) => r.id === roomId);
+      },
+
+      getBookingById: (bookingId: string) => {
+        return get().bookings.find((b) => b.id === bookingId);
+      },
+
+      getUserBookings: () => {
+        const { bookings, userSession } = get();
+        return bookings.filter((b) => b.userId === userSession.id);
+      },
+    }),
+    {
+      name: 'vku-booking-storage-v1',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        bookings: state.bookings,
+        userSession: state.userSession,
+      }),
+    }
+  )
+);
+
+
+
+
+================================================
+FILE: src/types/index.ts
+================================================
+/**
+ * Core TypeScript Interfaces & Types for VKU Room Booking App
+ */
+
+export type BuildingCode = 'All' | 'A' | 'B' | 'C' | 'V';
+
+export type RoomStatus = 'available' | 'maintenance' | 'full';
+
+export type EquipmentType =
+  | 'Projector'
+  | 'Whiteboard'
+  | 'Smart TV'
+  | 'High-Speed LAN'
+  | 'Air Conditioner'
+  | 'Sound System'
+  | 'Power Outlets'
+  | 'Conference Mic';
+
+export interface Room {
+  id: string;
+  name: string;
+  code: string;
+  building: 'A' | 'B' | 'C' | 'V';
+  floor: number;
+  capacity: number;
+  equipment: EquipmentType[];
+  status: RoomStatus;
+  image: string;
+  description: string;
+  lightingType?: 'Natural' | 'Studio' | 'Standard';
+  hasEthernet?: boolean;
+}
+
+export interface TimeSlot {
+  id: string;
+  startTime: string; // e.g. "07:30"
+  endTime: string;   // e.g. "09:30"
+  label: string;     // e.g. "07:30 - 09:30"
+  isBooked?: boolean;
+}
+
+export type BookingStatus = 'confirmed' | 'checked-in' | 'cancelled';
+
+export interface Booking {
+  id: string;
+  roomId: string;
+  roomName: string;
+  building: string;
+  floor: number;
+  userId: string;
+  userName: string;
+  userStudentId: string;
+  date: string; // YYYY-MM-DD
+  timeSlot: TimeSlot;
+  qrCode: string; // Payload string encoded in QR code
+  createdAt: string; // ISO 8601 string
+  status: BookingStatus;
+  notificationId?: string;
+}
+
+export interface UserSession {
+  id: string;
+  name: string;
+  studentId: string;
+  email: string;
+  department: string;
+  avatarUrl?: string;
+  role: 'student' | 'lecturer' | 'researcher';
+}
+
+export interface FilterState {
+  building: BuildingCode;
+  capacityCategory: 'all' | 'small' | 'medium' | 'large'; // all, <6, 6-10, >10
+  equipment: EquipmentType[];
+  searchQuery: string;
+}
+
+export type RootStackParamList = {
+  Home: undefined;
+  RoomDetail: { roomId: string };
+  BookingPass: { bookingId: string };
+  MyBookings: undefined;
+};
+
+
+
+
+================================================
+FILE: src/utils/dateUtils.ts
+================================================
+/**
+ * Date and Time utilities for VKU Study Room Booking
+ */
+
+export interface DayOption {
+  dateString: string; // YYYY-MM-DD
+  dayName: string;   // e.g. "T2", "Hôm nay"
+  dayNumber: number; // e.g. 10
+  monthNumber: number; // e.g. 9
+  isToday: boolean;
+  fullDateLabel: string;
+}
+
+const VIETNAMESE_DAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+/**
+ * Generate an array of the next 7 days starting from today
+ */
+export const generateNext7Days = (): DayOption[] => {
+  const days: DayOption[] = [];
+  const today = new Date();
+
+  for (let i = 0; i < 7; i++) {
+    const current = new Date();
+    current.setDate(today.getDate() + i);
+
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const day = String(current.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+
+    const isToday = i === 0;
+    const dayName = isToday ? 'Hôm nay' : VIETNAMESE_DAYS[current.getDay()];
+
+    days.push({
+      dateString,
+      dayName,
+      dayNumber: current.getDate(),
+      monthNumber: current.getMonth() + 1,
+      isToday,
+      fullDateLabel: `${dayName}, ${day}/${month}/${year}`,
+    });
+  }
+
+  return days;
+};
+
+/**
+ * Format a YYYY-MM-DD date into friendly Vietnamese text
+ */
+export const formatDisplayDate = (dateString: string): string => {
+  try {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = VIETNAMESE_DAYS[date.getDay()];
+    return `${dayOfWeek}, ${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
+  } catch {
+    return dateString;
+  }
+};
+
+/**
+ * Parses date string (YYYY-MM-DD) and time string (HH:mm) into a local Date object
+ */
+export const parseDateTime = (dateString: string, timeString: string): Date => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const [hours, minutes] = timeString.split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+};
+
+/**
+ * Calculates Date object for 15 minutes prior to slot start
+ */
+export const get15MinutesBeforeSlot = (dateString: string, startTime: string): Date => {
+  const slotDate = parseDateTime(dateString, startTime);
+  return new Date(slotDate.getTime() - 15 * 60 * 1000);
+};
+
+/**
+ * Checks if a slot time on a given date has already passed
+ */
+export const isSlotInPast = (dateString: string, startTime: string): boolean => {
+  const slotDate = parseDateTime(dateString, startTime);
+  return slotDate.getTime() <= Date.now();
+};
+
+
+
+
+================================================
+FILE: src/utils/mockData.ts
+================================================
+import { Room, TimeSlot, UserSession, Booking } from '../types';
+
+export const CURRENT_USER: UserSession = {
+  id: 'usr_vku_2026_01',
+  name: 'Nguyễn Văn An',
+  studentId: '22IT108',
+  email: 'annv.22it@vku.udn.vn',
+  department: 'Khoa Công nghệ Thông tin & Kinh tế số (VKU)',
+  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
+  role: 'student',
+};
+
+export const STANDARD_TIME_SLOTS: TimeSlot[] = [
+  { id: 'slot_1', startTime: '07:30', endTime: '09:30', label: '07:30 - 09:30' },
+  { id: 'slot_2', startTime: '09:30', endTime: '11:30', label: '09:30 - 11:30' },
+  { id: 'slot_3', startTime: '12:30', endTime: '14:30', label: '12:30 - 14:30' },
+  { id: 'slot_4', startTime: '14:30', endTime: '16:30', label: '14:30 - 16:30' },
+  { id: 'slot_5', startTime: '16:30', endTime: '18:30', label: '16:30 - 18:30' },
+  { id: 'slot_6', startTime: '18:30', endTime: '20:30', label: '18:30 - 20:30' },
+];
+
+export const INITIAL_ROOMS: Room[] = [
+  {
+    id: 'room_a101',
+    code: 'A.101',
+    name: 'Smart Innovation Lab',
+    building: 'A',
+    floor: 1,
+    capacity: 12,
+    equipment: ['Projector', 'Smart TV', 'Air Conditioner', 'High-Speed LAN', 'Power Outlets'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
+    description: 'Phòng thực hành đổi mới sáng tạo trang bị màn hình tương tác thông minh, bàn nhóm cơ động và kết nối cáp quang Gigabit, lý tưởng cho hackathon và thảo luận dự án.',
+    lightingType: 'Studio',
+    hasEthernet: true,
+  },
+  {
+    id: 'room_b204',
+    code: 'B.204',
+    name: 'Group Collaboration Hub',
+    building: 'B',
+    floor: 2,
+    capacity: 6,
+    equipment: ['Whiteboard', 'Air Conditioner', 'Power Outlets'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=800&q=80',
+    description: 'Không gian họp nhóm nhỏ ấm cúng với bảng kính 360 độ, ghế công thái học, hệ thống cách âm cao cấp phục vụ ôn thi nhóm và brainstorm.',
+    lightingType: 'Natural',
+    hasEthernet: false,
+  },
+  {
+    id: 'room_c302',
+    code: 'C.302',
+    name: 'Focus Quiet Study Zone',
+    building: 'C',
+    floor: 3,
+    capacity: 4,
+    equipment: ['Whiteboard', 'Air Conditioner', 'Power Outlets'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1497215842964-222b430dc094?auto=format&fit=crop&w=800&q=80',
+    description: 'Phòng yên tĩnh tuyệt đối dành cho nghiên cứu chuyên sâu, viết bài báo khoa học hoặc ôn luyện các chứng chỉ quốc tế.',
+    lightingType: 'Natural',
+    hasEthernet: true,
+  },
+  {
+    id: 'room_v105',
+    code: 'V.105',
+    name: 'Multimedia Presentation Suite',
+    building: 'V',
+    floor: 1,
+    capacity: 18,
+    equipment: ['Projector', 'Sound System', 'Conference Mic', 'Smart TV', 'Air Conditioner'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=800&q=80',
+    description: 'Hội trường nghiên cứu mini trang bị máy chiếu siêu nét 4K, hệ thống âm thanh vòm và micro hội thảo không dây phục vụ báo cáo seminar.',
+    lightingType: 'Studio',
+    hasEthernet: true,
+  },
+  {
+    id: 'room_v401',
+    code: 'V.401',
+    name: 'Thesis & Research Workshop',
+    building: 'V',
+    floor: 4,
+    capacity: 8,
+    equipment: ['Projector', 'Whiteboard', 'High-Speed LAN', 'Air Conditioner', 'Power Outlets'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=800&q=80',
+    description: 'Phòng hội thảo chuyên đề dành riêng cho sinh viên làm đồ án tốt nghiệp và nhóm nghiên cứu lab khoa CNTT.',
+    lightingType: 'Standard',
+    hasEthernet: true,
+  },
+  {
+    id: 'room_a305',
+    code: 'A.305',
+    name: 'AI & Data Science Workspace',
+    building: 'A',
+    floor: 3,
+    capacity: 10,
+    equipment: ['Smart TV', 'High-Speed LAN', 'Air Conditioner', 'Power Outlets', 'Whiteboard'],
+    status: 'available',
+    image: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=800&q=80',
+    description: 'Không gian tích hợp máy trạm hiệu năng cao và đường truyền mạng độc lập phục vụ huấn luyện mô hình AI & Big Data.',
+    lightingType: 'Natural',
+    hasEthernet: true,
+  },
+];
+
+// Helper to get formatted date string for relative days (0 = today, 1 = tomorrow, etc.)
+export const getFormattedDate = (offsetDays: number = 0): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().split('T')[0];
+};
+
+// Initial mock bookings to demonstrate conflict prevention & pass generation immediately
+export const INITIAL_BOOKINGS: Booking[] = [
+  {
+    id: 'bkg_sample_101',
+    roomId: 'room_a101',
+    roomName: 'Smart Innovation Lab',
+    building: 'A',
+    floor: 1,
+    userId: 'usr_other_student',
+    userName: 'Trần Thị Bích',
+    userStudentId: '22IT045',
+    date: getFormattedDate(0), // Today
+    timeSlot: STANDARD_TIME_SLOTS[1], // 09:30 - 11:30
+    qrCode: 'VKU-PASS-A101-SLOT2-22IT045',
+    createdAt: new Date().toISOString(),
+    status: 'confirmed',
+  },
+  {
+    id: 'bkg_sample_102',
+    roomId: 'room_b204',
+    roomName: 'Group Collaboration Hub',
+    building: 'B',
+    floor: 2,
+    userId: CURRENT_USER.id,
+    userName: CURRENT_USER.name,
+    userStudentId: CURRENT_USER.studentId,
+    date: getFormattedDate(1), // Tomorrow
+    timeSlot: STANDARD_TIME_SLOTS[3], // 14:30 - 16:30
+    qrCode: `VKU-PASS-B204-SLOT4-${CURRENT_USER.studentId}`,
+    createdAt: new Date().toISOString(),
+    status: 'confirmed',
+  },
+];
+
+
+
+
+================================================
+FILE: src/utils/notifications.ts
+================================================
+import { Platform } from 'react-native';
+import { Booking, Room } from '../types';
+import { get15MinutesBeforeSlot } from './dateUtils';
+
+// Modular imports từ expo-notifications/build để tránh nạp DevicePushTokenAutoRegistration.fx
+// Điều này ngăn chặn triệt để lỗi "Android Push notifications was removed from Expo Go with the release of SDK 53"
+import { setNotificationHandler } from 'expo-notifications/build/NotificationsHandler';
+import {
+  getPermissionsAsync,
+  requestPermissionsAsync,
+} from 'expo-notifications/build/NotificationPermissions';
+import { setNotificationChannelAsync } from 'expo-notifications/build/setNotificationChannelAsync';
+import { scheduleNotificationAsync } from 'expo-notifications/build/scheduleNotificationAsync';
+import { cancelScheduledNotificationAsync } from 'expo-notifications/build/cancelScheduledNotificationAsync';
+import {
+  AndroidNotificationPriority,
+  SchedulableTriggerInputTypes,
+} from 'expo-notifications/build/Notifications.types';
+import { AndroidImportance } from 'expo-notifications/build/NotificationChannelManager.types';
+
+/**
+ * ======================================================================================
+ * 🛡️ GIẢI PHÁP CHỐNG CRASH CHO EXPO GO (SDK 53 - 57+):
+ * ======================================================================================
+ * - Bằng cách import trực tiếp các module con phục vụ Local Notifications thay vì import
+ *   từ gốc 'expo-notifications', Metro Bundler sẽ KHÔNG nạp file side-effect
+ *   'DevicePushTokenAutoRegistration.fx' và không gọi 'addPushTokenListener'.
+ * - Nhờ đó, hàm 'warnOfExpoGoPushUsage' không bị kích hoạt -> Không bao giờ bị crash
+ *   màn hình đỏ khi khởi động ứng dụng trên Expo Go Android!
+ * ======================================================================================
+ */
+
+// 1. Cấu hình hành vi hiển thị thông báo khi ứng dụng đang mở (Foreground)
+setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    priority: AndroidNotificationPriority.HIGH,
+  }),
+});
+
+/**
+ * 2. Xin quyền hiển thị thông báo cục bộ và thiết lập Android Channel
+ */
+export const requestNotificationPermissions = async (): Promise<boolean> => {
+  try {
+    const { status: existingStatus } = await getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    // Cấu hình Android Notification Channel với mức ưu tiên cao cho Android 8.0+
+    if (Platform.OS === 'android') {
+      await setNotificationChannelAsync('study-room-alerts', {
+        name: 'Nhắc nhở Đặt phòng học VKU',
+        description: 'Kênh thông báo nhắc trước 15 phút cho lịch đặt phòng học VKU',
+        importance: AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#2563EB',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    }
+
+    return finalStatus === 'granted';
+  } catch (error) {
+    console.warn('Lỗi khi xin quyền thông báo cục bộ:', error);
+    return false;
+  }
+};
+
+/**
+ * 3. Lập lịch thông báo cục bộ (Local Notification) trước ca học 15 phút
+ */
+export const scheduleBookingReminder = async (
+  booking: Booking,
+  room: Room
+): Promise<string | undefined> => {
+  try {
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) {
+      console.log('Quyền thông báo chưa được cấp, bỏ qua lập lịch nhắc nhở.');
+      return undefined;
+    }
+
+    const triggerDate = get15MinutesBeforeSlot(booking.date, booking.timeSlot.startTime);
+    const now = Date.now();
+    const triggerTime = triggerDate.getTime();
+
+    const title = `⏰ Nhắc nhở: Phiên học tại ${room.name} (${room.code})`;
+    const body = `Khung giờ ${booking.timeSlot.label} của bạn sẽ bắt đầu trong 15 phút nữa tại Tòa ${room.building}, Tầng ${room.floor}. Hãy chuẩn bị check-in!`;
+
+    // Trường hợp 1: Ca học diễn ra trong tương lai (cách hiện tại > 30 giây)
+    if (triggerTime > now + 30 * 1000) {
+      const notificationId = await scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data: { bookingId: booking.id, roomId: room.id },
+          sound: 'default',
+        },
+        trigger: {
+          type: SchedulableTriggerInputTypes.DATE,
+          date: triggerDate,
+          channelId: Platform.OS === 'android' ? 'study-room-alerts' : undefined,
+        },
+      });
+      console.log(`Đã lên lịch thông báo thành công cho vé ${booking.id} lúc ${triggerDate.toLocaleString()}`);
+      return notificationId;
+    } else {
+      // Trường hợp 2: Ca học sắp bắt đầu (dưới 15 phút) -> Kích hoạt thông báo tức thì sau 3 giây
+      const notificationId = await scheduleNotificationAsync({
+        content: {
+          title: `🔔 Đặt phòng thành công: ${room.name}`,
+          body: `Lịch đặt của bạn lúc ${booking.timeSlot.label} sắp bắt đầu! Mã QR check-in đã sẵn sàng trong thẻ phòng.`,
+          data: { bookingId: booking.id, roomId: room.id },
+          sound: 'default',
+        },
+        trigger: {
+          type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 3,
+          channelId: Platform.OS === 'android' ? 'study-room-alerts' : undefined,
+        },
+      });
+      return notificationId;
+    }
+  } catch (error) {
+    console.warn('Lỗi khi lập lịch thông báo nhắc nhở:', error);
+    return undefined;
+  }
+};
+
+/**
+ * 4. Hủy thông báo đã lập lịch khi sinh viên hủy lịch đặt phòng
+ */
+export const cancelScheduledNotification = async (notificationId?: string): Promise<void> => {
+  if (!notificationId) return;
+  try {
+    await cancelScheduledNotificationAsync(notificationId);
+    console.log(`Đã hủy thông báo đã lên lịch: ${notificationId}`);
+  } catch (error) {
+    console.warn('Lỗi khi hủy thông báo:', error);
+  }
+};
+
+
+
+================================================
+FILE: .claude/settings.json
+================================================
+{
+  "enabledPlugins": {
+    "expo@claude-plugins-official": true
+  }
+}
+
+
