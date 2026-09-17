@@ -11,6 +11,7 @@ import {
   scheduleBookingReminder,
   cancelScheduledNotification,
 } from '../utils/notifications';
+import { isSlotConflicting, hasUserConflict } from '../utils/conflictChecker';
 
 export interface BookingFilters {
   searchText: string;
@@ -121,21 +122,10 @@ export const useBookingStore = create<BookingState>()(
       getAvailableSlotsForRoom: (roomId: string, date: string) => {
         const { bookings } = get();
 
-        return TIME_SLOTS.map(slot => {
-          // Chỉ coi là đã đặt nếu có booking khớp roomId + date + timeSlotId và status khác 'cancelled'
-          const isBooked = bookings.some(
-            b =>
-              b.roomId === roomId &&
-              b.date === date &&
-              b.timeSlotId === slot.id &&
-              b.status !== 'cancelled'
-          );
-
-          return {
-            slot,
-            isBooked,
-          };
-        });
+        return TIME_SLOTS.map(slot => ({
+          slot,
+          isBooked: isSlotConflicting(bookings, roomId, date, slot.id),
+        }));
       },
 
       // 5. BOOKING CREATION WITH CONFLICT PREVENTION
@@ -169,15 +159,7 @@ export const useBookingStore = create<BookingState>()(
         }
 
         // 🛡️ DOUBLE-CHECK: Kiểm tra trùng lịch phòng học (chống race condition & UI bypass)
-        const isRoomConflict = bookings.some(
-          b =>
-            b.roomId === roomId &&
-            b.date === date &&
-            b.timeSlotId === timeSlotId &&
-            b.status !== 'cancelled'
-        );
-
-        if (isRoomConflict) {
+        if (isSlotConflicting(bookings, roomId, date, timeSlotId)) {
           return {
             success: false,
             error: `Khung giờ ${slot.startTime} - ${slot.endTime} ngày ${date} tại ${room.name} đã được đặt bởi người khác. Vui lòng chọn ca hoặc phòng khác!`,
@@ -185,15 +167,7 @@ export const useBookingStore = create<BookingState>()(
         }
 
         // 🛡️ DOUBLE-CHECK: Kiểm tra sinh viên có bị trùng lịch học cá nhân không
-        const isUserConflict = bookings.some(
-          b =>
-            b.userId === currentUser.id &&
-            b.date === date &&
-            b.timeSlotId === timeSlotId &&
-            b.status !== 'cancelled'
-        );
-
-        if (isUserConflict) {
+        if (hasUserConflict(bookings, currentUser.id, date, timeSlotId)) {
           return {
             success: false,
             error: `Bạn đã có một lịch đặt phòng khác trong khung giờ ${slot.startTime} - ${slot.endTime} ngày ${date}. Không thể đặt 2 phòng cùng lúc.`,

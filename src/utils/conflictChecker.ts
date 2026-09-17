@@ -2,39 +2,40 @@ import { Booking, Room, TimeSlot } from '../types';
 import { isSlotInPast } from './dateHelpers';
 
 /**
- * Kiểm tra xem một ca học cụ thể của một phòng trong một ngày đã có người đặt chưa
+ * Pure function kiểm tra xem một ca học cụ thể của một phòng trong một ngày có bị xung đột (đã đặt) hay không.
+ * Chỉ tính các booking có status khác 'cancelled'.
  */
-export const isSlotBooked = (
+export const isSlotConflicting = (
+  bookings: Booking[],
   roomId: string,
   date: string,
-  timeSlotId: string,
-  bookings: Booking[]
+  timeSlotId: string
 ): boolean => {
   return bookings.some(
     b =>
       b.roomId === roomId &&
       b.date === date &&
       b.timeSlotId === timeSlotId &&
-      (b.status === 'upcoming' || b.status === 'checked-in')
+      b.status !== 'cancelled'
   );
 };
 
 /**
- * Lấy danh sách ID các ca học đã bị đặt của một phòng trong một ngày
+ * Kiểm tra xem sinh viên có bị trùng lịch học cá nhân trong cùng khung giờ không
  */
-export const getBookedSlotIdsForRoom = (
-  roomId: string,
+export const hasUserConflict = (
+  bookings: Booking[],
+  userId: string,
   date: string,
-  bookings: Booking[]
-): string[] => {
-  return bookings
-    .filter(
-      b =>
-        b.roomId === roomId &&
-        b.date === date &&
-        (b.status === 'upcoming' || b.status === 'checked-in')
-    )
-    .map(b => b.timeSlotId);
+  timeSlotId: string
+): boolean => {
+  return bookings.some(
+    b =>
+      b.userId === userId &&
+      b.date === date &&
+      b.timeSlotId === timeSlotId &&
+      b.status !== 'cancelled'
+  );
 };
 
 export type SlotAvailabilityStatus = 'AVAILABLE' | 'BOOKED' | 'PAST';
@@ -52,27 +53,9 @@ export const getSlotAvailability = (
     return 'PAST';
   }
 
-  if (isSlotBooked(room.id, date, slot.id, bookings)) {
+  if (isSlotConflicting(bookings, room.id, date, slot.id)) {
     return 'BOOKED';
   }
 
   return 'AVAILABLE';
-};
-
-/**
- * Kiểm tra xem sinh viên có bị trùng lịch học cá nhân trong cùng khung giờ không
- */
-export const hasUserConflict = (
-  userId: string,
-  date: string,
-  timeSlotId: string,
-  bookings: Booking[]
-): boolean => {
-  return bookings.some(
-    b =>
-      b.userId === userId &&
-      b.date === date &&
-      b.timeSlotId === timeSlotId &&
-      (b.status === 'upcoming' || b.status === 'checked-in')
-  );
 };
