@@ -1,116 +1,136 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { Room } from '../types';
 import { COLORS } from '../constants/colors';
 
-interface RoomCardProps {
+export interface RoomCardProps {
   room: Room;
-  availableSlotsCount: number;
-  totalSlotsCount: number;
   onPress: () => void;
 }
 
-export const RoomCard: React.FC<RoomCardProps> = ({
-  room,
-  availableSlotsCount,
-  totalSlotsCount: _totalSlotsCount,
-  onPress,
-}) => {
-  const hasSlots = availableSlotsCount > 0;
-  const isRoomAvailable = room.status === 'available';
+// Chiều cao cố định chuẩn xác để phục vụ FlatList getItemLayout
+export const ROOM_CARD_HEIGHT = 302;
+export const ROOM_CARD_MARGIN_BOTTOM = 16;
+export const ROOM_CARD_TOTAL_ITEM_HEIGHT = ROOM_CARD_HEIGHT + ROOM_CARD_MARGIN_BOTTOM;
 
-  const equipmentSummary = room.equipment.slice(0, 3).join(' • ');
+const RoomCardComponent: React.FC<RoomCardProps> = ({ room, onPress }) => {
+  const [imageLoading, setImageLoading] = useState(true);
+  const isAvailable = room.status === 'available';
 
   return (
     <TouchableOpacity activeOpacity={0.85} style={styles.card} onPress={onPress}>
+      {/* 1. Ảnh phòng học kèm trạng thái loading & placeholder */}
       <View style={styles.imageContainer}>
-        <Image source={{ uri: room.photoUrl }} style={styles.image} resizeMode="cover" />
+        {imageLoading && (
+          <View style={styles.loadingPlaceholder}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        )}
+        <Image
+          source={{ uri: room.photoUrl }}
+          style={styles.image}
+          resizeMode="cover"
+          onLoadEnd={() => setImageLoading(false)}
+        />
+
+        {/* Badge Vị trí Tòa nhà & Tầng */}
         <View style={styles.buildingBadge}>
-          <Text style={styles.buildingBadgeText}>Tòa {room.building}</Text>
+          <Text style={styles.buildingBadgeText}>
+            Building {room.building} - Tầng {room.floor}
+          </Text>
         </View>
+
+        {/* Badge Sức chứa */}
         <View style={styles.capacityBadge}>
-          <Text style={styles.capacityText}>{room.capacity} chỗ</Text>
+          <Text style={styles.capacityText}>👤 {room.capacity} chỗ</Text>
         </View>
       </View>
 
+      {/* 2. Phần nội dung thông tin phòng */}
       <View style={styles.body}>
-        <View style={styles.headerRow}>
+        {/* Hàng trạng thái phòng nổi bật */}
+        <View style={styles.statusRow}>
           <View
             style={[
-              styles.roomStatusPill,
-              {
-                backgroundColor: isRoomAvailable
-                  ? COLORS.availableSoft
-                  : COLORS.occupiedSoft,
-              },
+              styles.statusPill,
+              isAvailable ? styles.statusAvailable : styles.statusOccupied,
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                {
-                  backgroundColor: isRoomAvailable ? COLORS.available : COLORS.occupied,
-                },
+                isAvailable ? styles.dotAvailable : styles.dotOccupied,
               ]}
             />
             <Text
               style={[
-                styles.roomStatusText,
-                {
-                  color: isRoomAvailable ? COLORS.available : COLORS.occupied,
-                },
+                styles.statusText,
+                isAvailable ? styles.textAvailable : styles.textOccupied,
               ]}
             >
-              {isRoomAvailable ? 'Available' : 'Occupied'}
+              {isAvailable ? 'Available Now' : 'Occupied'}
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.slotStatusPill,
-              {
-                backgroundColor: hasSlots ? COLORS.successSoft : COLORS.dangerSoft,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.slotStatusText,
-                { color: hasSlots ? COLORS.success : COLORS.danger },
-              ]}
-            >
-              {hasSlots ? `Còn ${availableSlotsCount} ca` : 'Đã kín ca'}
-            </Text>
-          </View>
+          <Text style={styles.roomTypeTag}>Phòng học VKU</Text>
         </View>
 
-        <Text style={styles.name} numberOfLines={1}>
+        {/* Tên phòng */}
+        <Text style={styles.roomName} numberOfLines={1}>
           {room.name}
         </Text>
 
-        <Text style={styles.locationText}>
-          📍 Tòa {room.building} • Tầng {room.floor}
+        {/* Vị trí */}
+        <Text style={styles.locationText} numberOfLines={1}>
+          📍 Tòa {room.building} • Tầng {room.floor} • Sức chứa tối đa {room.capacity}{' '}
+          sinh viên
         </Text>
 
-        {equipmentSummary ? (
-          <Text style={styles.equipmentText} numberOfLines={1}>
-            ⚡ {equipmentSummary}
-            {room.equipment.length > 3 ? ` +${room.equipment.length - 3}` : ''}
-          </Text>
-        ) : null}
+        {/* Danh sách trang thiết bị */}
+        <View style={styles.equipmentContainer}>
+          {room.equipment.map(item => (
+            <View key={item} style={styles.equipmentChip}>
+              <Text style={styles.equipmentText}>⚡ {item}</Text>
+            </View>
+          ))}
+        </View>
       </View>
     </TouchableOpacity>
   );
 };
 
+// Bọc bằng React.memo với hàm so sánh tùy biến để triệt tiêu re-render thừa
+export const RoomCard = React.memo<RoomCardProps>(
+  RoomCardComponent,
+  (prevProps, nextProps) => {
+    return (
+      prevProps.room.id === nextProps.room.id &&
+      prevProps.room.status === nextProps.room.status &&
+      prevProps.room.name === nextProps.room.name &&
+      prevProps.room.photoUrl === nextProps.room.photoUrl &&
+      prevProps.onPress === nextProps.onPress
+    );
+  }
+);
+
+RoomCard.displayName = 'RoomCard';
+
 const styles = StyleSheet.create({
   card: {
+    height: ROOM_CARD_HEIGHT,
+    marginBottom: ROOM_CARD_MARGIN_BOTTOM,
     backgroundColor: COLORS.card,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -118,7 +138,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   imageContainer: {
-    height: 140,
+    height: 160,
     width: '100%',
     position: 'relative',
     backgroundColor: COLORS.divider,
@@ -127,14 +147,24 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  loadingPlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.divider,
+  },
   buildingBadge: {
     position: 'absolute',
     top: 10,
     left: 10,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
     paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   buildingBadgeText: {
     color: '#FFFFFF',
@@ -145,65 +175,91 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(29, 78, 216, 0.9)',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(29, 78, 216, 0.88)',
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   capacityText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   body: {
     padding: 14,
+    flex: 1,
+    justifyContent: 'space-between',
   },
-  headerRow: {
+  statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  roomStatusPill: {
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
   },
+  statusAvailable: {
+    backgroundColor: COLORS.availableSoft,
+  },
+  statusOccupied: {
+    backgroundColor: COLORS.occupiedSoft,
+  },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 5,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginRight: 6,
   },
-  roomStatusText: {
-    fontSize: 11,
+  dotAvailable: {
+    backgroundColor: COLORS.available,
+  },
+  dotOccupied: {
+    backgroundColor: COLORS.occupied,
+  },
+  statusText: {
+    fontSize: 12,
     fontWeight: '700',
-    textTransform: 'capitalize',
   },
-  slotStatusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  textAvailable: {
+    color: COLORS.available,
   },
-  slotStatusText: {
+  textOccupied: {
+    color: COLORS.occupied,
+  },
+  roomTypeTag: {
     fontSize: 11,
-    fontWeight: '600',
+    color: COLORS.textSubtle,
+    fontWeight: '500',
   },
-  name: {
-    fontSize: 16,
+  roomName: {
+    fontSize: 17,
     fontWeight: '700',
     color: COLORS.text,
-    marginBottom: 4,
   },
   locationText: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginBottom: 4,
+  },
+  equipmentContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  equipmentChip: {
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   equipmentText: {
-    fontSize: 12,
-    color: COLORS.textSubtle,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '500',
   },
 });

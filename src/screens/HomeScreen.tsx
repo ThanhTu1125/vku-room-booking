@@ -1,48 +1,87 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
-  TextInput,
   TouchableOpacity,
-  ScrollView,
+  Platform,
+  ListRenderItem,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { useRooms } from '../hooks/useRooms';
-import { useFilterStore } from '../store/useFilterStore';
 import { useBookingStore } from '../store/useBookingStore';
-import { RoomCard } from '../components/RoomCard';
-import { DateSelector } from '../components/DateSelector';
-import { FilterChip } from '../components/FilterChip';
-import { BUILDINGS } from '../constants/buildings';
-import { CAPACITY_RANGES } from '../constants/capacityRanges';
+import { RoomCard, ROOM_CARD_TOTAL_ITEM_HEIGHT } from '../components/RoomCard';
+import { FilterBar } from '../components/FilterBar';
 import { COLORS } from '../constants/colors';
-import { Building } from '../types';
+import { Room } from '../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+
   const currentUser = useBookingStore(state => state.currentUser);
+  const getFilteredRooms = useBookingStore(state => state.getFilteredRooms);
+  const resetFilters = useBookingStore(state => state.resetFilters);
 
-  const { filteredRooms, selectedDate, activeFilterCount } = useRooms();
+  // Lấy danh sách phòng đã áp dụng bộ lọc từ store
+  const filteredRooms = getFilteredRooms();
 
-  const selectedBuilding = useFilterStore(state => state.selectedBuilding);
-  const setBuilding = useFilterStore(state => state.setBuilding);
-  const selectedCapacityRangeId = useFilterStore(state => state.selectedCapacityRangeId);
-  const setCapacityRange = useFilterStore(state => state.setCapacityRange);
-  const setDate = useFilterStore(state => state.setDate);
-  const searchQuery = useFilterStore(state => state.searchQuery);
-  const setSearchQuery = useFilterStore(state => state.setSearchQuery);
-  const resetFilters = useFilterStore(state => state.resetFilters);
+  // Navigation sang chi tiết phòng được memo hóa
+  const handleRoomPress = useCallback(
+    (roomId: string) => {
+      navigation.navigate('RoomDetail', { roomId });
+    },
+    [navigation]
+  );
+
+  // renderItem memoized tuyệt đối, không tạo function closure mới mỗi lần render
+  const renderItem: ListRenderItem<Room> = useCallback(
+    ({ item }) => <RoomCard room={item} onPress={() => handleRoomPress(item.id)} />,
+    [handleRoomPress]
+  );
+
+  // keyExtractor memoized
+  const keyExtractor = useCallback((item: Room) => item.id, []);
+
+  // getItemLayout cố định chuẩn xác giúp FlatList nhảy trực tiếp vị trí cuộn O(1)
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<Room> | null | undefined, index: number) => ({
+      length: ROOM_CARD_TOTAL_ITEM_HEIGHT,
+      offset: ROOM_CARD_TOTAL_ITEM_HEIGHT * index,
+      index,
+    }),
+    []
+  );
+
+  // Empty state component
+  const ListEmptyComponent = useMemo(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyEmoji}>🏢</Text>
+        <Text style={styles.emptyTitle}>Không tìm thấy phòng phù hợp</Text>
+        <Text style={styles.emptySubtitle}>
+          Thử tìm kiếm với từ khóa khác hoặc xóa bớt các điều kiện lọc tòa nhà, sức chứa
+          và trang thiết bị.
+        </Text>
+        <TouchableOpacity
+          style={styles.resetBtn}
+          onPress={resetFilters}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.resetBtnText}>Xóa bộ lọc</Text>
+        </TouchableOpacity>
+      </View>
+    ),
+    [resetFilters]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      {/* Top App Header */}
+      {/* Header thương hiệu VKU */}
       <View style={styles.header}>
         <View>
           <Text style={styles.welcomeSubtitle}>Hệ thống Đặt phòng học</Text>
@@ -53,116 +92,30 @@ export const HomeScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Search Input Bar */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            placeholder="Tìm kiếm theo tên phòng, tòa nhà..."
-            placeholderTextColor={COLORS.textSubtle}
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text style={styles.clearSearchIcon}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      {/* Thanh tìm kiếm & bộ lọc đa tiêu chí (Debounce 300ms) */}
+      <FilterBar />
 
-      {/* Date Selector Row */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>📅 Chọn ngày mượn phòng</Text>
-      </View>
-      <DateSelector selectedDate={selectedDate} onSelectDate={setDate} />
-
-      {/* Building Filter Chips */}
-      <View style={styles.filterSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-        >
-          <FilterChip
-            label="Tất cả các tòa"
-            isSelected={selectedBuilding === 'ALL'}
-            onPress={() => setBuilding('ALL')}
-          />
-          {BUILDINGS.map(b => (
-            <FilterChip
-              key={b}
-              label={`Tòa ${b}`}
-              isSelected={selectedBuilding === b}
-              onPress={() => setBuilding(b as Building)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Capacity Range Filter Chips */}
-      <View style={styles.filterSection}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterList}
-        >
-          {CAPACITY_RANGES.map(range => (
-            <FilterChip
-              key={range.id}
-              label={range.label}
-              isSelected={selectedCapacityRangeId === range.id}
-              onPress={() => setCapacityRange(range.id, range.min, range.max)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Room Count & Reset Button */}
-      <View style={styles.resultsInfoRow}>
-        <Text style={styles.resultsCount}>
-          Tìm thấy <Text style={styles.bold}>{filteredRooms.length}</Text> phòng khả dụng
+      {/* Thông tin số lượng kết quả */}
+      <View style={styles.resultInfoRow}>
+        <Text style={styles.resultCountText}>
+          Tìm thấy <Text style={styles.boldText}>{filteredRooms.length}</Text> phòng học
+          phù hợp
         </Text>
-        {activeFilterCount > 0 && (
-          <TouchableOpacity onPress={resetFilters}>
-            <Text style={styles.resetFilterText}>Đặt lại bộ lọc</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Room List */}
+      {/* Danh sách phòng học với FlatList hiệu năng tối đa */}
       <FlatList
         data={filteredRooms}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.roomList}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <RoomCard
-            room={item}
-            availableSlotsCount={item.availableSlotsCount}
-            totalSlotsCount={item.totalSlotsCount}
-            onPress={() =>
-              navigation.navigate('RoomDetail', {
-                roomId: item.id,
-                initialDate: selectedDate,
-              })
-            }
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>🏢</Text>
-            <Text style={styles.emptyTitle}>Không tìm thấy phòng phù hợp</Text>
-            <Text style={styles.emptySubtitle}>
-              Hãy thử chọn ngày khác hoặc mở rộng tiêu chí lọc tòa nhà và sức chứa.
-            </Text>
-            <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
-              <Text style={styles.resetBtnText}>Xem tất cả phòng</Text>
-            </TouchableOpacity>
-          </View>
-        }
+        ListEmptyComponent={ListEmptyComponent}
       />
     </SafeAreaView>
   );
@@ -179,7 +132,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   welcomeSubtitle: {
     fontSize: 13,
@@ -204,106 +157,60 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-  searchSection: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    height: 46,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  searchIcon: {
-    fontSize: 15,
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  clearSearchIcon: {
-    fontSize: 14,
-    color: COLORS.textSubtle,
-    padding: 4,
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
-    marginTop: 4,
-    marginBottom: 2,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  filterSection: {
-    marginVertical: 2,
-  },
-  filterList: {
-    paddingHorizontal: 16,
-  },
-  resultsInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  resultInfoRow: {
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  resultsCount: {
+  resultCountText: {
     fontSize: 13,
     color: COLORS.textMuted,
   },
-  bold: {
+  boldText: {
     fontWeight: '700',
     color: COLORS.text,
   },
-  resetFilterText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '600',
-  },
-  roomList: {
+  listContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
   },
   emptyEmoji: {
     fontSize: 48,
     marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 6,
+    textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 13,
     color: COLORS.textMuted,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 19,
     marginBottom: 16,
   },
   resetBtn: {
-    backgroundColor: COLORS.primarySoft,
-    paddingHorizontal: 16,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   resetBtnText: {
-    color: COLORS.primary,
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
     fontSize: 13,
   },
 });

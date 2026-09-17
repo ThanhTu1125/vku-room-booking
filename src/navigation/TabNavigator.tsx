@@ -2,7 +2,7 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList } from './types';
-import { HomeScreen } from '../screens/HomeScreen';
+import { HomeStackNavigator } from './HomeStackNavigator';
 import { MyBookingsScreen } from '../screens/MyBookingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { useBookingStore } from '../store/useBookingStore';
@@ -25,10 +25,10 @@ export const TabNavigator: React.FC = () => {
       }}
     >
       <Tab.Screen
-        name="ExploreTab"
-        component={HomeScreen}
+        name="HomeTab"
+        component={HomeStackNavigator}
         options={{
-          tabBarLabel: 'Khám phá',
+          tabBarLabel: 'Tìm phòng',
           tabBarIcon: ({ focused }) => (
             <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>🏛️</Text>
           ),
