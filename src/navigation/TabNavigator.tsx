@@ -1,6 +1,7 @@
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { HomeStackNavigator } from './HomeStackNavigator';
 import { MyBookingsScreen } from '../screens/MyBookingsScreen';
@@ -12,7 +13,12 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const TabNavigator: React.FC = () => {
   const bookings = useBookingStore(state => state.bookings);
-  const activeBookingsCount = bookings.filter(b => b.status === 'upcoming').length;
+  const currentUser = useBookingStore(state => state.currentUser);
+
+  // Đếm số lượng booking sắp tới của riêng người dùng hiện tại
+  const activeBookingsCount = currentUser
+    ? bookings.filter(b => b.userId === currentUser.id && b.status === 'upcoming').length
+    : 0;
 
   return (
     <Tab.Navigator
@@ -29,8 +35,12 @@ export const TabNavigator: React.FC = () => {
         component={HomeStackNavigator}
         options={{
           tabBarLabel: 'Tìm phòng',
-          tabBarIcon: ({ focused }) => (
-            <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>🏛️</Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'business' : 'business-outline'}
+              size={size || 22}
+              color={color}
+            />
           ),
         }}
       />
@@ -41,8 +51,12 @@ export const TabNavigator: React.FC = () => {
           tabBarLabel: 'Đặt phòng của tôi',
           tabBarBadge: activeBookingsCount > 0 ? activeBookingsCount : undefined,
           tabBarBadgeStyle: styles.badge,
-          tabBarIcon: ({ focused }) => (
-            <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>🎫</Text>
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'calendar' : 'calendar-outline'}
+              size={size || 22}
+              color={color}
+            />
           ),
         }}
       />
@@ -50,9 +64,13 @@ export const TabNavigator: React.FC = () => {
         name="ProfileTab"
         component={ProfileScreen}
         options={{
-          tabBarLabel: 'Hồ sơ',
-          tabBarIcon: ({ focused }) => (
-            <Text style={[styles.tabIcon, focused && styles.tabIconFocused]}>👤</Text>
+          tabBarLabel: 'Cá nhân',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'person' : 'person-outline'}
+              size={size || 22}
+              color={color}
+            />
           ),
         }}
       />
@@ -72,14 +90,6 @@ const styles = StyleSheet.create({
   tabBarLabel: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  tabIcon: {
-    fontSize: 20,
-    opacity: 0.7,
-  },
-  tabIconFocused: {
-    opacity: 1,
-    transform: [{ scale: 1.1 }],
   },
   badge: {
     backgroundColor: COLORS.primary,

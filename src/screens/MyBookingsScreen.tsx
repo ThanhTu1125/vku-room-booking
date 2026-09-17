@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useBookingStore } from '../store/useBookingStore';
 import { Booking, Room } from '../types';
 import { BookingListItem } from '../components/BookingListItem';
@@ -29,6 +30,8 @@ export const MyBookingsScreen: React.FC = () => {
   const rooms = useBookingStore(state => state.rooms);
   const getUserBookings = useBookingStore(state => state.getUserBookings);
   const cancelBooking = useBookingStore(state => state.cancelBooking);
+
+  const navigation = useNavigation<any>();
 
   // State cục bộ
   const [selectedTab, setSelectedTab] = useState<TabFilter>('ALL');
@@ -241,6 +244,13 @@ export const MyBookingsScreen: React.FC = () => {
               Khám phá danh sách phòng học tại VKU và đặt phòng thực hành cho nhóm của
               bạn.
             </Text>
+            <TouchableOpacity
+              style={styles.exploreButton}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('HomeTab')}
+            >
+              <Text style={styles.exploreButtonText}>🏛️ Khám phá phòng học</Text>
+            </TouchableOpacity>
           </View>
         }
       />
@@ -353,5 +363,22 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 18,
+    marginBottom: 16,
+  },
+  exploreButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  exploreButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

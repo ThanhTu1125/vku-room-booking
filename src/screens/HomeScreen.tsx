@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Platform,
   ListRenderItem,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -29,11 +31,23 @@ export const HomeScreen: React.FC = () => {
   const getFilteredRooms = useBookingStore(state => state.getFilteredRooms);
   const resetFilters = useBookingStore(state => state.resetFilters);
 
+  // Kích hoạt LayoutAnimation trên Android
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
   // Lấy danh sách phòng đã áp dụng bộ lọc từ store (reactive với filters và rooms)
   const filteredRooms = useMemo(
     () => getFilteredRooms(),
     [getFilteredRooms, filters, rooms]
   );
+
+  // Hiệu ứng chuyển động mượt mà khi danh sách phòng thay đổi do lọc/tìm kiếm
+  useEffect(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, [filteredRooms]);
 
   // Navigation sang chi tiết phòng được memo hóa
   const handleRoomPress = useCallback(

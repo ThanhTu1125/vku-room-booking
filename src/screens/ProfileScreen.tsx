@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBookingStore } from '../store/useBookingStore';
-import { requestNotificationPermissions } from '../utils/notifications';
-import { scheduleNotificationAsync } from 'expo-notifications/build/scheduleNotificationAsync';
-import { SchedulableTriggerInputTypes } from 'expo-notifications/build/Notifications.types';
+import {
+  requestNotificationPermission,
+  scheduleCheckInReminder,
+} from '../utils/notificationHelper';
 import { COLORS } from '../constants/colors';
 
 export const ProfileScreen: React.FC = () => {
   const currentUser = useBookingStore(state => state.currentUser);
   const bookings = useBookingStore(state => state.bookings);
+  const getUserBookings = useBookingStore(state => state.getUserBookings);
+  const logout = useBookingStore(state => state.logout);
   const resetToMockData = useBookingStore(state => state.resetToMockData);
 
-  const completedCount = bookings.filter(
-    b => b.status === 'checked-in' || b.status === 'completed'
-  ).length;
-  const upcomingCount = bookings.filter(b => b.status === 'upcoming').length;
+  // Lọc chỉ tính lượt đặt của riêng user hiện tại
+  const userBookings = useMemo(() => {
+    return getUserBookings();
+  }, [bookings, getUserBookings]);
 
+  const upcomingCount = useMemo(() => {
+    return userBookings.filter(b => b.status === 'upcoming' || b.status === 'checked-in')
+      .length;
+  }, [userBookings]);
+
+  const completedCount = useMemo(() => {
+    return userBookings.filter(b => b.status === 'completed').length;
+  }, [userBookings]);
+
+  // Test kích hoạt Local Notification
   const handleTestNotification = async () => {
     try {
-      const hasPerm = await requestNotificationPermissions();
+      const hasPerm = await requestNotificationPermission();
       if (!hasPerm) {
         Alert.alert(
           'Chưa cấp quyền',
@@ -35,27 +48,16 @@ export const ProfileScreen: React.FC = () => {
         return;
       }
 
-      await scheduleNotificationAsync({
-        content: {
-          title: '🔔 Thông báo thử nghiệm VKU',
-          body: 'Tính năng nhắc lịch học 15 phút trước giờ vào phòng đang hoạt động hoàn hảo!',
-          sound: 'default',
-        },
-        trigger: {
-          type: SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: 2,
-        },
-      });
-
       Alert.alert(
-        'Đã gửi!',
-        'Thông báo nhắc nhở sẽ xuất hiện trên thanh thông báo trong 2 giây nữa.'
+        'Đã kiểm tra quyền!',
+        'Quyền thông báo cục bộ đã được kích hoạt thành công trên thiết bị.'
       );
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể kích hoạt thông báo thử nghiệm.');
+    } catch {
+      Alert.alert('Lỗi', 'Không thể kích hoạt kiểm tra thông báo.');
     }
   };
 
+  // Đặt lại dữ liệu ban đầu
   const handleResetData = () => {
     Alert.alert(
       'Khôi phục dữ liệu mẫu',
@@ -68,6 +70,24 @@ export const ProfileScreen: React.FC = () => {
           onPress: () => {
             resetToMockData();
             Alert.alert('Thành công', 'Đã khôi phục dữ liệu mẫu thành công.');
+          },
+        },
+      ]
+    );
+  };
+
+  // Đăng xuất tài khoản
+  const handleLogout = () => {
+    Alert.alert(
+      'Đăng xuất tài khoản',
+      'Bạn có chắc chắn muốn đăng xuất? Dữ liệu đặt phòng đã lưu vẫn được bảo lưu an toàn.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: () => {
+            logout();
           },
         },
       ]
@@ -104,7 +124,9 @@ export const ProfileScreen: React.FC = () => {
           </Text>
           {currentUser ? (
             <>
-              <Text style={styles.studentIdBadge}>MSSV: {currentUser.studentId}</Text>
+              <View style={styles.badgeWrapper}>
+                <Text style={styles.studentIdBadge}>MSSV: {currentUser.studentId}</Text>
+              </View>
               <Text style={styles.emailText}>✉ {currentUser.email}</Text>
             </>
           ) : (
@@ -115,7 +137,7 @@ export const ProfileScreen: React.FC = () => {
         {/* Statistics Row */}
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{bookings.length}</Text>
+            <Text style={styles.statNumber}>{userBookings.length}</Text>
             <Text style={styles.statLabel}>Tổng lượt đặt</Text>
           </View>
           <View style={styles.statDivider} />
@@ -123,14 +145,14 @@ export const ProfileScreen: React.FC = () => {
             <Text style={[styles.statNumber, { color: COLORS.primary }]}>
               {upcomingCount}
             </Text>
-            <Text style={styles.statLabel}>Sắp diễn ra</Text>
+            <Text style={styles.statLabel}>Sắp tới</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
             <Text style={[styles.statNumber, { color: COLORS.available }]}>
               {completedCount}
             </Text>
-            <Text style={styles.statLabel}>Đã check-in</Text>
+            <Text style={styles.statLabel}>Hoàn thành</Text>
           </View>
         </View>
 
@@ -163,9 +185,9 @@ export const ProfileScreen: React.FC = () => {
           >
             <Text style={styles.actionIcon}>🔔</Text>
             <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Kiểm tra Local Notification</Text>
+              <Text style={styles.actionTitle}>Kiểm tra quyền Thông báo</Text>
               <Text style={styles.actionDesc}>
-                Kích hoạt thông báo nhắc nhở tức thì để kiểm tra âm thanh và banner
+                Xác nhận quyền nhận thông báo nhắc lịch học trước 15 phút
               </Text>
             </View>
             <Text style={styles.actionChevron}>›</Text>
@@ -188,6 +210,17 @@ export const ProfileScreen: React.FC = () => {
               </Text>
             </View>
             <Text style={styles.actionChevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Logout Button */}
+        <View style={styles.logoutWrapper}>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            activeOpacity={0.8}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutBtnText}>🚪 Đăng Xuất Tài Khoản</Text>
           </TouchableOpacity>
         </View>
 
@@ -260,6 +293,9 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 4,
   },
+  badgeWrapper: {
+    marginBottom: 6,
+  },
   studentIdBadge: {
     backgroundColor: COLORS.primarySoft,
     color: COLORS.primary,
@@ -268,7 +304,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 6,
-    marginBottom: 6,
   },
   emailText: {
     fontSize: 12,
@@ -356,6 +391,23 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.divider,
     marginVertical: 6,
+  },
+  logoutWrapper: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  logoutBtn: {
+    backgroundColor: COLORS.occupiedSoft,
+    borderWidth: 1,
+    borderColor: COLORS.occupiedSoft,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  logoutBtnText: {
+    color: COLORS.occupied,
+    fontSize: 14,
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',

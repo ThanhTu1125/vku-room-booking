@@ -23,8 +23,10 @@ export interface BookingState {
   rooms: Room[];
   bookings: Booking[];
   filters: BookingFilters;
+  _hasHydrated: boolean;
 
   // ACTIONS
+  setHasHydrated: (hasHydrated: boolean) => void;
   login: (user: User) => void;
   logout: () => void;
   setSearchText: (text: string) => void;
@@ -65,12 +67,14 @@ export const useBookingStore = create<BookingState>()(
   persist(
     (set, get) => ({
       // 1. STATE
-      currentUser: MOCK_USER,
+      currentUser: null,
       rooms: MOCK_ROOMS,
       bookings: MOCK_BOOKINGS,
       filters: INITIAL_FILTERS,
+      _hasHydrated: false,
 
-      // 2. AUTH ACTIONS
+      // 2. AUTH & HYDRATION ACTIONS
+      setHasHydrated: (hasHydrated: boolean) => set({ _hasHydrated: hasHydrated }),
       login: (user: User) => set({ currentUser: user }),
       logout: () => set({ currentUser: null }),
 
@@ -323,6 +327,9 @@ export const useBookingStore = create<BookingState>()(
         currentUser: state.currentUser,
         bookings: state.bookings,
       }),
+      onRehydrateStorage: () => state => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
