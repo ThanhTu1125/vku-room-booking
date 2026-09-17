@@ -1,6 +1,8 @@
 # VKU Study Room Booking (StudyRoomBooking) 🎓📱
 
 > Ứng dụng di động quản lý & đặt phòng học/phòng lab thời gian thực dành cho sinh viên Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU).
+>
+> 🔗 **GitHub Repository**: [https://github.com/ThanhTu1125/vku-room-booking](https://github.com/ThanhTu1125/vku-room-booking)
 
 ---
 
@@ -33,12 +35,18 @@
 
 ## 🚀 Hướng dẫn cài đặt & Khởi chạy
 
-### 1. Cài đặt thư viện phụ thuộc:
+### 1. Clone project:
+```bash
+git clone https://github.com/ThanhTu1125/vku-room-booking.git
+cd vku-room-booking
+```
+
+### 2. Cài đặt thư viện phụ thuộc:
 ```bash
 npm install
 ```
 
-### 2. Khởi chạy Metro Bundler:
+### 3. Khởi chạy Metro Bundler:
 ```bash
 npx expo start
 ```
@@ -46,7 +54,7 @@ npx expo start
 - Nhấn `a` để mở trên Android Emulator.
 - Nhấn `w` để mở trên Web browser.
 
-### 3. Kiểm tra mã nguồn:
+### 4. Kiểm tra mã nguồn:
 ```bash
 # Kiểm tra định kiểu TypeScript:
 npm run typecheck
