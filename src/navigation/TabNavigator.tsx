@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import { HomeStackNavigator } from './HomeStackNavigator';
@@ -12,6 +13,7 @@ import { COLORS } from '../constants/colors';
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 export const TabNavigator: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const bookings = useBookingStore(state => state.bookings);
   const currentUser = useBookingStore(state => state.currentUser);
 
@@ -26,7 +28,13 @@ export const TabNavigator: React.FC = () => {
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 54 + Math.max(insets.bottom, 8),
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
+        ],
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
@@ -83,8 +91,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    height: 60,
-    paddingBottom: 8,
     paddingTop: 6,
   },
   tabBarLabel: {

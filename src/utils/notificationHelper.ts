@@ -12,9 +12,9 @@ import { get15MinutesBeforeSlot } from './dateHelpers';
  *    'ExpoTopicSubscriptionModule'" khi chạy trên Expo Go / Expo Snack, module này
  *    SỬ DỤNG DYNAMIC REQUIRE TRONG TRY/CATCH thay vì static import ở cấp cao nhất.
  * 3. GRACEFUL DEGRADATION: Nếu native module không tồn tại trong môi trường hiện tại,
- *    các hàm sẽ bắt lỗi an toàn (catch), ghi log cảnh báo và vô hiệu hóa riêng phần
- *    thông báo nhắc nhở — ĐẢM BẢO toàn bộ ứng dụng (đặt phòng, QR, danh sách vé)
- *    VẪN HOẠT ĐỘNG HOÀN TOÀN BÌNH THƯỜNG, KHÔNG BAO GIỜ CRASH APP.
+ *    các hàm sẽ bắt lỗi an toàn (catch), ghi log thông tin (console.log) và vô hiệu
+ *    hóa riêng phần thông báo nhắc nhở — ĐẢM BẢO toàn bộ ứng dụng (đặt phòng, QR,
+ *    danh sách vé) VẪN HOẠT ĐỘNG HOÀN TOÀN BÌNH THƯỜNG, KHÔNG BAO GIỜ CRASH APP.
  * ============================================================================
  */
 
@@ -22,6 +22,8 @@ const ANDROID_CHANNEL_ID = 'study-room-alerts';
 
 let NotificationsModule: typeof import('expo-notifications') | null = null;
 let hasAttemptedLoad = false;
+let isChannelSetup = false;
+let isSettingUpChannel = false;
 
 /**
  * Nạp module expo-notifications an toàn bằng dynamic require trong try/catch
@@ -38,9 +40,9 @@ function getNotifications(): typeof import('expo-notifications') | null {
     NotificationsModule = mod;
     return NotificationsModule;
   } catch (error: any) {
-    console.warn(
-      '[NotificationHelper] Thiết bị/môi trường này (Expo Go/Snack Android) không hỗ trợ notification native module.',
-      'Tính năng nhắc lịch 15 phút sẽ bị vô hiệu hóa an toàn (graceful fallback):',
+    console.log(
+      '[NotificationHelper] Môi trường này (Expo Go/Snack Android) không hỗ trợ notification native module.',
+      'Tính năng nhắc lịch 15 phút sẽ được vô hiệu hóa an toàn (graceful fallback):',
       error?.message || error
     );
     NotificationsModule = null;
@@ -67,7 +69,7 @@ export const setupNotificationHandler = (): void => {
       }),
     });
   } catch (error: any) {
-    console.warn(
+    console.log(
       '[NotificationHelper] Bỏ qua setupNotificationHandler:',
       error?.message || error
     );
@@ -76,16 +78,20 @@ export const setupNotificationHandler = (): void => {
 
 /**
  * Thiết lập Android Notification Channel (cần thiết cho Android 8.0+)
+ * Có cờ kiểm tra chỉ chạy đúng 1 lần duy nhất trong toàn bộ phiên ứng dụng
  */
 export const setupNotificationChannel = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
+  if (isChannelSetup || isSettingUpChannel) return;
 
+  isSettingUpChannel = true;
   try {
     const Notifications = getNotifications();
     if (
       !Notifications ||
       typeof Notifications.setNotificationChannelAsync !== 'function'
     ) {
+      isChannelSetup = true;
       return;
     }
     await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
@@ -98,11 +104,15 @@ export const setupNotificationChannel = async (): Promise<void> => {
       enableVibrate: true,
       showBadge: true,
     });
+    isChannelSetup = true;
   } catch (error: any) {
-    console.warn(
-      '[NotificationHelper] Bỏ qua setupNotificationChannel:',
+    console.log(
+      '[NotificationHelper] Bỏ qua setupNotificationChannel (môi trường không hỗ trợ):',
       error?.message || error
     );
+    isChannelSetup = true;
+  } finally {
+    isSettingUpChannel = false;
   }
 };
 
@@ -118,7 +128,7 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
       typeof Notifications.getPermissionsAsync !== 'function' ||
       typeof Notifications.requestPermissionsAsync !== 'function'
     ) {
-      console.warn(
+      console.log(
         '[NotificationHelper] Notification native module không khả dụng trên môi trường này.'
       );
       return false;
@@ -145,8 +155,8 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 
     return false;
   } catch (error: any) {
-    console.warn(
-      '[NotificationHelper] Lỗi khi xin quyền thông báo:',
+    console.log(
+      '[NotificationHelper] Bỏ qua xin quyền thông báo:',
       error?.message || error
     );
     return false;
@@ -170,7 +180,7 @@ export const scheduleCheckInReminder = async (
   try {
     const Notifications = getNotifications();
     if (!Notifications || typeof Notifications.scheduleNotificationAsync !== 'function') {
-      console.warn(
+      console.log(
         '[NotificationHelper] Notification native module không khả dụng, bỏ qua lập lịch nhắc nhở.'
       );
       return null;
@@ -224,7 +234,7 @@ export const scheduleCheckInReminder = async (
     );
     return notificationId;
   } catch (error: any) {
-    console.warn(
+    console.log(
       '[NotificationHelper] Lỗi khi lập lịch thông báo nhắc nhở:',
       error?.message || error
     );
@@ -249,7 +259,7 @@ export const cancelReminder = async (notificationId: string): Promise<void> => {
     await Notifications.cancelScheduledNotificationAsync(notificationId);
     console.log(`[NotificationHelper] Đã hủy thông báo ID: ${notificationId}`);
   } catch (error: any) {
-    console.warn(
+    console.log(
       `[NotificationHelper] Lỗi khi hủy thông báo ID ${notificationId}:`,
       error?.message || error
     );

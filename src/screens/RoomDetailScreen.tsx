@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { HomeStackParamList } from '../navigation/types';
 import { Booking } from '../types';
@@ -27,6 +27,7 @@ type RouteProps = RouteProp<HomeStackParamList, 'RoomDetail'>;
 export const RoomDetailScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { roomId, initialDate } = route.params;
 
   // Lấy thông tin phòng và actions từ Zustand store
@@ -129,7 +130,10 @@ export const RoomDetailScreen: React.FC = () => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 110 + insets.bottom },
+        ]}
       >
         {/* 2. Ảnh lớn của phòng học */}
         <View style={styles.imageWrapper}>
@@ -213,7 +217,9 @@ export const RoomDetailScreen: React.FC = () => {
       </ScrollView>
 
       {/* 6. Nút Đặt phòng cố định ở chân màn hình */}
-      <View style={styles.bottomBar}>
+      <View
+        style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
+      >
         <View style={styles.bottomSummary}>
           <Text style={styles.bottomSummaryLabel}>Khung giờ đã chọn:</Text>
           <Text style={styles.bottomSummaryValue}>
@@ -461,7 +467,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 20,
+    paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

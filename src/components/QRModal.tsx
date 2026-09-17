@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Booking, Room } from '../types';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
@@ -22,6 +23,7 @@ export const QRModal: React.FC<QRModalProps> = ({
   onClose,
   onCheckIn,
 }) => {
+  const insets = useSafeAreaInsets();
   const currentUser = useBookingStore(state => state.currentUser);
 
   if (!booking) return null;
@@ -32,7 +34,16 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable
+        style={[
+          styles.overlay,
+          {
+            paddingBottom: Math.max(insets.bottom, 20) + 4,
+            paddingTop: Math.max(insets.top, 20) + 4,
+          },
+        ]}
+        onPress={onClose}
+      >
         <Pressable style={styles.card} onPress={e => e.stopPropagation()}>
           {/* Header */}
           <View style={styles.header}>

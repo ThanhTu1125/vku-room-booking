@@ -31,10 +31,17 @@ export const HomeScreen: React.FC = () => {
   const getFilteredRooms = useBookingStore(state => state.getFilteredRooms);
   const resetFilters = useBookingStore(state => state.resetFilters);
 
-  // Kích hoạt LayoutAnimation trên Android
+  // Kích hoạt LayoutAnimation trên Android (chỉ cần thiết cho Old Architecture)
   useEffect(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
+    if (
+      Platform.OS === 'android' &&
+      UIManager.setLayoutAnimationEnabledExperimental &&
+      // @ts-ignore
+      !global._IS_FABRIC
+    ) {
+      try {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      } catch {}
     }
   }, []);
 

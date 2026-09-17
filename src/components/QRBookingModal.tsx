@@ -1,5 +1,14 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import {
+  Modal,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Pressable,
+  ScrollView,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { Booking, Room } from '../types';
 import { TIME_SLOTS } from '../constants/timeSlots';
@@ -20,6 +29,7 @@ export const QRBookingModal: React.FC<QRBookingModalProps> = ({
   room,
   onClose,
 }) => {
+  const insets = useSafeAreaInsets();
   const currentUser = useBookingStore(state => state.currentUser);
 
   if (!booking) return null;
@@ -64,90 +74,110 @@ export const QRBookingModal: React.FC<QRBookingModalProps> = ({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.passCard} onPress={e => e.stopPropagation()}>
-          {/* Header vé: Logo & Thông tin trường */}
-          <View style={styles.header}>
-            <View style={styles.headerTitleWrap}>
-              <Text style={styles.passBadge}>VKU SMART PASS</Text>
-              <Text style={styles.title}>Vé Đặt Phòng Học</Text>
-            </View>
-            <TouchableOpacity
-              onPress={onClose}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={styles.closeBtn}
-            >
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Phần thông tin phòng học */}
-          <View style={styles.roomSection}>
-            <Text style={styles.roomName} numberOfLines={1}>
-              {room?.name || 'Phòng học VKU'}
-            </Text>
-            <View style={styles.metaRow}>
-              <View style={styles.locationBadge}>
-                <Text style={styles.locationBadgeText}>
-                  Tòa {room?.building || 'A'} • Tầng {room?.floor || 1}
-                </Text>
+      <Pressable
+        style={[
+          styles.overlay,
+          {
+            paddingBottom: Math.max(insets.bottom, 16) + 4,
+            paddingTop: Math.max(insets.top, 16) + 4,
+          },
+        ]}
+        onPress={onClose}
+      >
+        <Pressable
+          style={[styles.passCard, { maxHeight: '92%' }]}
+          onPress={e => e.stopPropagation()}
+        >
+          <ScrollView
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.cardScrollContent}
+          >
+            {/* Header vé: Logo & Thông tin trường */}
+            <View style={styles.header}>
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.passBadge}>VKU SMART PASS</Text>
+                <Text style={styles.title}>Vé Đặt Phòng Học</Text>
               </View>
-              <View
-                style={[styles.statusBadge, { backgroundColor: statusConfig.bgColor }]}
+              <TouchableOpacity
+                onPress={onClose}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={styles.closeBtn}
               >
-                <Text style={[styles.statusBadgeText, { color: statusConfig.textColor }]}>
-                  {statusConfig.text}
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Phần thông tin phòng học */}
+            <View style={styles.roomSection}>
+              <Text style={styles.roomName} numberOfLines={1}>
+                {room?.name || 'Phòng học VKU'}
+              </Text>
+              <View style={styles.metaRow}>
+                <View style={styles.locationBadge}>
+                  <Text style={styles.locationBadgeText}>
+                    Tòa {room?.building || 'A'} • Tầng {room?.floor || 1}
+                  </Text>
+                </View>
+                <View
+                  style={[styles.statusBadge, { backgroundColor: statusConfig.bgColor }]}
+                >
+                  <Text
+                    style={[styles.statusBadgeText, { color: statusConfig.textColor }]}
+                  >
+                    {statusConfig.text}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Đường kẻ răng cưa / vé cắt (Ticket Divider) */}
+            <View style={styles.ticketDividerContainer}>
+              <View style={styles.notchLeft} />
+              <View style={styles.dashedLine} />
+              <View style={styles.notchRight} />
+            </View>
+
+            {/* Chi tiết ca học & ngày mượn */}
+            <View style={styles.timeSection}>
+              <Text style={styles.timeLabel}>Thời gian & Khung giờ:</Text>
+              <Text style={styles.timeValue}>
+                {dateFormatted} · {timeSlotLabel}
+              </Text>
+              <View style={styles.codeRow}>
+                <Text style={styles.codeLabel}>Mã vé: </Text>
+                <Text style={styles.codeHighlight}>{shortBookingId}</Text>
+                <Text style={styles.studentLabel}>
+                  {' '}
+                  • Sinh viên: {currentUser?.studentId || '23IT296'}
                 </Text>
               </View>
             </View>
-          </View>
 
-          {/* Đường kẻ răng cưa / vé cắt (Ticket Divider) */}
-          <View style={styles.ticketDividerContainer}>
-            <View style={styles.notchLeft} />
-            <View style={styles.dashedLine} />
-            <View style={styles.notchRight} />
-          </View>
-
-          {/* Chi tiết ca học & ngày mượn */}
-          <View style={styles.timeSection}>
-            <Text style={styles.timeLabel}>Thời gian & Khung giờ:</Text>
-            <Text style={styles.timeValue}>
-              {dateFormatted} · {timeSlotLabel}
-            </Text>
-            <View style={styles.codeRow}>
-              <Text style={styles.codeLabel}>Mã vé: </Text>
-              <Text style={styles.codeHighlight}>{shortBookingId}</Text>
-              <Text style={styles.studentLabel}>
-                {' '}
-                • Sinh viên: {currentUser?.studentId || '23IT296'}
+            {/* Mã QR trung tâm (Booking Pass QR Code) */}
+            <View style={styles.qrContainer}>
+              <View style={styles.qrWhiteBox}>
+                <QRCode
+                  value={booking.qrPayload || booking.id}
+                  size={180}
+                  color={COLORS.text}
+                  backgroundColor="#FFFFFF"
+                />
+              </View>
+              <Text style={styles.qrHint}>
+                Quét mã QR tại cửa phòng học để tự động mở khóa phòng
               </Text>
             </View>
-          </View>
 
-          {/* Mã QR trung tâm (Booking Pass QR Code) */}
-          <View style={styles.qrContainer}>
-            <View style={styles.qrWhiteBox}>
-              <QRCode
-                value={booking.qrPayload || booking.id}
-                size={180}
-                color={COLORS.text}
-                backgroundColor="#FFFFFF"
-              />
-            </View>
-            <Text style={styles.qrHint}>
-              Quét mã QR tại cửa phòng học để tự động mở khóa phòng
-            </Text>
-          </View>
-
-          {/* Nút Đóng vé */}
-          <TouchableOpacity
-            style={styles.closeActionButton}
-            activeOpacity={0.85}
-            onPress={onClose}
-          >
-            <Text style={styles.closeActionText}>Đóng vé</Text>
-          </TouchableOpacity>
+            {/* Nút Đóng vé */}
+            <TouchableOpacity
+              style={styles.closeActionButton}
+              activeOpacity={0.85}
+              onPress={onClose}
+            >
+              <Text style={styles.closeActionText}>Đóng vé</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -167,9 +197,6 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     backgroundColor: COLORS.card,
     borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 22,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25,
@@ -178,6 +205,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
+  },
+  cardScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 22,
   },
   header: {
     flexDirection: 'row',

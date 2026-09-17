@@ -28,6 +28,11 @@
         "SCHEDULE_EXACT_ALARM",
         "RECEIVE_BOOT_COMPLETED"
       ],
+      "androidNavigationBar": {
+        "visible": "always",
+        "backgroundColor": "#FFFFFF",
+        "barStyle": "dark-content"
+      },
       "predictiveBackGestureEnabled": false
     },
     "web": {
