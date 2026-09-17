@@ -90,16 +90,26 @@ export const ProfileScreen: React.FC = () => {
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {currentUser.name
-                .split(' ')
-                .map(n => n[0])
-                .join('')
-                .slice(-2)}
+              {currentUser
+                ? currentUser.name
+                    .split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .slice(-2)
+                : 'SV'}
             </Text>
           </View>
-          <Text style={styles.userName}>{currentUser.name}</Text>
-          <Text style={styles.studentIdBadge}>MSSV: {currentUser.studentId}</Text>
-          <Text style={styles.emailText}>✉ {currentUser.email}</Text>
+          <Text style={styles.userName}>
+            {currentUser ? currentUser.name : 'Khách vãng lai'}
+          </Text>
+          {currentUser ? (
+            <>
+              <Text style={styles.studentIdBadge}>MSSV: {currentUser.studentId}</Text>
+              <Text style={styles.emailText}>✉ {currentUser.email}</Text>
+            </>
+          ) : (
+            <Text style={styles.emailText}>Chưa đăng nhập tài khoản</Text>
+          )}
         </View>
 
         {/* Statistics Row */}

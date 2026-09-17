@@ -86,7 +86,8 @@ export const QRModal: React.FC<QRModalProps> = ({
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Sinh viên:</Text>
               <Text style={styles.infoValue}>
-                {currentUser.name} ({currentUser.studentId})
+                {currentUser?.name || 'Sinh viên VKU'} (
+                {currentUser?.studentId || '23IT296'})
               </Text>
             </View>
 

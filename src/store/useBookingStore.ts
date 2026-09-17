@@ -1,77 +1,215 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Booking, Room, TimeSlot, User } from '../types';
+import { User, Room, Booking, Building, Equipment, TimeSlot } from '../types';
 import { MOCK_ROOMS } from '../data/rooms';
 import { MOCK_BOOKINGS } from '../data/bookings';
 import { MOCK_USER } from '../data/mockUser';
-import { generateBookingId, generateQrPayload } from '../utils/idGenerator';
-import { isSlotBooked, hasUserConflict } from '../utils/conflictChecker';
+import { TIME_SLOTS } from '../constants/timeSlots';
+import { generateBookingId } from '../utils/idGenerator';
 import {
   scheduleBookingReminder,
   cancelScheduledNotification,
 } from '../utils/notifications';
 
-interface BookingState {
+export interface BookingFilters {
+  searchText: string;
+  buildings: Building[];
+  capacityRange: [number, number] | null;
+  equipment: Equipment[];
+}
+
+export interface BookingState {
+  // STATE
+  currentUser: User | null;
   rooms: Room[];
   bookings: Booking[];
-  currentUser: User;
+  filters: BookingFilters;
 
-  // Actions
-  createBooking: (params: {
-    roomId: string;
-    date: string;
-    timeSlot: TimeSlot;
-  }) => Promise<{ success: boolean; error?: string; booking?: Booking }>;
+  // ACTIONS
+  login: (user: User) => void;
+  logout: () => void;
+  setSearchText: (text: string) => void;
+  toggleBuildingFilter: (building: Building) => void;
+  toggleEquipmentFilter: (equipment: Equipment) => void;
+  setCapacityRange: (range: [number, number] | null) => void;
+  resetFilters: () => void;
 
-  cancelBooking: (bookingId: string) => Promise<boolean>;
-  checkInBooking: (bookingId: string) => boolean;
+  getAvailableSlotsForRoom: (
+    roomId: string,
+    date: string
+  ) => { slot: TimeSlot; isBooked: boolean }[];
+
+  createBooking: (
+    roomId: string,
+    date: string,
+    timeSlotId: string
+  ) => { success: boolean; booking?: Booking; error?: string };
+
+  cancelBooking: (bookingId: string) => void;
+  getUserBookings: () => Booking[];
+  getFilteredRooms: () => Room[];
+
+  // Helper actions phục vụ UI
   getRoomById: (roomId: string) => Room | undefined;
+  checkInBooking: (bookingId: string) => boolean;
   resetToMockData: () => void;
 }
+
+const INITIAL_FILTERS: BookingFilters = {
+  searchText: '',
+  buildings: [],
+  capacityRange: null,
+  equipment: [],
+};
 
 export const useBookingStore = create<BookingState>()(
   persist(
     (set, get) => ({
+      // 1. STATE
+      currentUser: MOCK_USER,
       rooms: MOCK_ROOMS,
       bookings: MOCK_BOOKINGS,
-      currentUser: MOCK_USER,
+      filters: INITIAL_FILTERS,
 
-      getRoomById: (roomId: string) => {
-        return get().rooms.find(r => r.id === roomId);
+      // 2. AUTH ACTIONS
+      login: (user: User) => set({ currentUser: user }),
+      logout: () => set({ currentUser: null }),
+
+      // 3. FILTER ACTIONS
+      setSearchText: (searchText: string) =>
+        set(state => ({
+          filters: { ...state.filters, searchText },
+        })),
+
+      toggleBuildingFilter: (building: Building) =>
+        set(state => {
+          const current = state.filters.buildings;
+          const exists = current.includes(building);
+          return {
+            filters: {
+              ...state.filters,
+              buildings: exists
+                ? current.filter(b => b !== building)
+                : [...current, building],
+            },
+          };
+        }),
+
+      toggleEquipmentFilter: (equipment: Equipment) =>
+        set(state => {
+          const current = state.filters.equipment;
+          const exists = current.includes(equipment);
+          return {
+            filters: {
+              ...state.filters,
+              equipment: exists
+                ? current.filter(e => e !== equipment)
+                : [...current, equipment],
+            },
+          };
+        }),
+
+      setCapacityRange: (capacityRange: [number, number] | null) =>
+        set(state => ({
+          filters: { ...state.filters, capacityRange },
+        })),
+
+      resetFilters: () => set({ filters: INITIAL_FILTERS }),
+
+      // 4. SLOT AVAILABILITY QUERY
+      getAvailableSlotsForRoom: (roomId: string, date: string) => {
+        const { bookings } = get();
+
+        return TIME_SLOTS.map(slot => {
+          // Chỉ coi là đã đặt nếu có booking khớp roomId + date + timeSlotId và status khác 'cancelled'
+          const isBooked = bookings.some(
+            b =>
+              b.roomId === roomId &&
+              b.date === date &&
+              b.timeSlotId === slot.id &&
+              b.status !== 'cancelled'
+          );
+
+          return {
+            slot,
+            isBooked,
+          };
+        });
       },
 
-      createBooking: async ({ roomId, date, timeSlot }) => {
+      // 5. BOOKING CREATION WITH CONFLICT PREVENTION
+      createBooking: (roomId: string, date: string, timeSlotId: string) => {
         const { rooms, bookings, currentUser } = get();
+
+        // Kiểm tra phiên đăng nhập
+        if (!currentUser) {
+          return {
+            success: false,
+            error: 'Vui lòng đăng nhập tài khoản sinh viên trước khi đặt phòng.',
+          };
+        }
+
+        // Kiểm tra phòng học tồn tại
         const room = rooms.find(r => r.id === roomId);
-
         if (!room) {
-          return { success: false, error: 'Phòng học không tồn tại.' };
-        }
-
-        // 1. Kiểm tra phòng đã có người đặt khung giờ này chưa
-        if (isSlotBooked(roomId, date, timeSlot.id, bookings)) {
           return {
             success: false,
-            error: `Khung giờ ${timeSlot.startTime} - ${timeSlot.endTime} của ${room.name} đã được đặt bởi sinh viên khác!`,
+            error: 'Phòng học không tồn tại trong hệ thống.',
           };
         }
 
-        // 2. Kiểm tra sinh viên có bị trùng lịch cá nhân không
-        if (hasUserConflict(currentUser.id, date, timeSlot.id, bookings)) {
+        // Kiểm tra timeSlot hợp lệ
+        const slot = TIME_SLOTS.find(s => s.id === timeSlotId);
+        if (!slot) {
           return {
             success: false,
-            error: `Bạn đã có lịch đặt phòng khác trong khung giờ này vào ngày ${date}.`,
+            error: 'Khung giờ đặt phòng không hợp lệ.',
           };
         }
 
+        // 🛡️ DOUBLE-CHECK: Kiểm tra trùng lịch phòng học (chống race condition & UI bypass)
+        const isRoomConflict = bookings.some(
+          b =>
+            b.roomId === roomId &&
+            b.date === date &&
+            b.timeSlotId === timeSlotId &&
+            b.status !== 'cancelled'
+        );
+
+        if (isRoomConflict) {
+          return {
+            success: false,
+            error: `Khung giờ ${slot.startTime} - ${slot.endTime} ngày ${date} tại ${room.name} đã được đặt bởi người khác. Vui lòng chọn ca hoặc phòng khác!`,
+          };
+        }
+
+        // 🛡️ DOUBLE-CHECK: Kiểm tra sinh viên có bị trùng lịch học cá nhân không
+        const isUserConflict = bookings.some(
+          b =>
+            b.userId === currentUser.id &&
+            b.date === date &&
+            b.timeSlotId === timeSlotId &&
+            b.status !== 'cancelled'
+        );
+
+        if (isUserConflict) {
+          return {
+            success: false,
+            error: `Bạn đã có một lịch đặt phòng khác trong khung giờ ${slot.startTime} - ${slot.endTime} ngày ${date}. Không thể đặt 2 phòng cùng lúc.`,
+          };
+        }
+
+        // Khởi tạo vé đặt phòng mới
         const newBookingId = generateBookingId();
-        const qrPayload = generateQrPayload({
+        const qrPayload = JSON.stringify({
           bookingId: newBookingId,
           roomId,
           date,
-          timeSlotId: timeSlot.id,
+          timeSlotId,
+          userId: currentUser.id,
           studentId: currentUser.studentId,
+          timestamp: Date.now(),
         });
 
         const newBooking: Booking = {
@@ -79,43 +217,102 @@ export const useBookingStore = create<BookingState>()(
           roomId,
           userId: currentUser.id,
           date,
-          timeSlotId: timeSlot.id,
+          timeSlotId,
           status: 'upcoming',
           qrPayload,
           createdAt: new Date().toISOString(),
         };
 
-        // Lập lịch nhắc nhở Local Notification trước 15 phút
-        try {
-          await scheduleBookingReminder(newBooking, room, timeSlot);
-        } catch (e) {
-          console.warn('Không thể lên lịch notification:', e);
-        }
+        // Lập lịch Local Notification nhắc trước 15 phút (chạy bất đồng bộ nền)
+        scheduleBookingReminder(newBooking, room, slot).catch(err => {
+          console.warn('[useBookingStore] Lập lịch thông báo thất bại:', err);
+        });
 
+        // Cập nhật State toàn cục
         set({
           bookings: [newBooking, ...bookings],
         });
 
-        return { success: true, booking: newBooking };
+        return {
+          success: true,
+          booking: newBooking,
+        };
       },
 
-      cancelBooking: async (bookingId: string) => {
+      // 6. CANCEL BOOKING
+      cancelBooking: (bookingId: string) => {
         const { bookings } = get();
         const booking = bookings.find(b => b.id === bookingId);
-        if (!booking) return false;
+        if (!booking) return;
 
-        try {
-          await cancelScheduledNotification(booking.id);
-        } catch (e) {
-          console.warn('Lỗi khi hủy notification:', e);
-        }
+        // Hủy thông báo nhắc nhở đã lên lịch
+        cancelScheduledNotification(bookingId).catch(err => {
+          console.warn('[useBookingStore] Hủy thông báo thất bại:', err);
+        });
 
         set({
           bookings: bookings.map(b =>
             b.id === bookingId ? { ...b, status: 'cancelled' as const } : b
           ),
         });
-        return true;
+      },
+
+      // 7. GET USER BOOKINGS (Sắp xếp mới nhất lên đầu)
+      getUserBookings: () => {
+        const { bookings, currentUser } = get();
+        if (!currentUser) return [];
+
+        return bookings
+          .filter(b => b.userId === currentUser.id)
+          .sort((a, b) => {
+            const dateCompare = b.date.localeCompare(a.date);
+            if (dateCompare !== 0) return dateCompare;
+            return b.timeSlotId.localeCompare(a.timeSlotId);
+          });
+      },
+
+      // 8. GET FILTERED ROOMS (Tìm kiếm + Bộ lọc)
+      getFilteredRooms: () => {
+        const { rooms, filters } = get();
+        const { searchText, buildings, capacityRange, equipment } = filters;
+
+        return rooms.filter(room => {
+          // Lọc theo từ khóa tìm kiếm (tên phòng, không phân biệt hoa thường)
+          if (searchText.trim()) {
+            const query = searchText.toLowerCase().trim();
+            const matchName = room.name.toLowerCase().includes(query);
+            const matchBuilding =
+              `tòa ${room.building}`.toLowerCase().includes(query) ||
+              room.building.toLowerCase() === query;
+            if (!matchName && !matchBuilding) return false;
+          }
+
+          // Lọc theo tòa nhà
+          if (buildings.length > 0 && !buildings.includes(room.building)) {
+            return false;
+          }
+
+          // Lọc theo khoảng sức chứa [min, max]
+          if (capacityRange) {
+            const [min, max] = capacityRange;
+            if (room.capacity < min || room.capacity > max) {
+              return false;
+            }
+          }
+
+          // Lọc theo thiết bị (phải sở hữu tất cả thiết bị yêu cầu)
+          if (equipment.length > 0) {
+            const hasAllEquipment = equipment.every(eq => room.equipment.includes(eq));
+            if (!hasAllEquipment) return false;
+          }
+
+          return true;
+        });
+      },
+
+      // 9. HELPER ACTIONS
+      getRoomById: (roomId: string) => {
+        return get().rooms.find(r => r.id === roomId);
       },
 
       checkInBooking: (bookingId: string) => {
@@ -133,16 +330,18 @@ export const useBookingStore = create<BookingState>()(
 
       resetToMockData: () => {
         set({
+          currentUser: MOCK_USER,
           rooms: MOCK_ROOMS,
           bookings: MOCK_BOOKINGS,
-          currentUser: MOCK_USER,
+          filters: INITIAL_FILTERS,
         });
       },
     }),
     {
-      name: 'vku_study_room_booking_storage',
+      name: 'study-room-booking-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: state => ({
+        currentUser: state.currentUser,
         bookings: state.bookings,
       }),
     }

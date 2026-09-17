@@ -61,11 +61,7 @@ export const RoomDetailScreen: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const result = await createBooking({
-      roomId: room.id,
-      date: currentDate,
-      timeSlot: selectedSlot,
-    });
+    const result = createBooking(room.id, currentDate, selectedSlot.id);
     setIsSubmitting(false);
 
     if (result.success && result.booking) {

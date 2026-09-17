@@ -50,8 +50,8 @@ export const MyBookingsScreen: React.FC = () => {
         {
           text: 'Hủy lịch',
           style: 'destructive',
-          onPress: async () => {
-            await cancelBooking(booking.id);
+          onPress: () => {
+            cancelBooking(booking.id);
             Alert.alert('Đã hủy', 'Lịch đặt phòng đã được hủy thành công.');
           },
         },
