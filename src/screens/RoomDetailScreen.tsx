@@ -19,6 +19,7 @@ import { TimeSlotGrid } from '../components/TimeSlotGrid';
 import { BookingConfirmModal } from '../components/BookingConfirmModal';
 import { QRBookingModal } from '../components/QRBookingModal';
 import { getTodayString } from '../utils/dateHelpers';
+import { requestNotificationPermission } from '../utils/notificationHelper';
 import { COLORS } from '../constants/colors';
 
 type RouteProps = RouteProp<HomeStackParamList, 'RoomDetail'>;
@@ -55,11 +56,23 @@ export const RoomDetailScreen: React.FC = () => {
   }, []);
 
   // Xử lý xác nhận đặt phòng trong Confirm Modal
-  const handleConfirmBooking = useCallback(() => {
+  const handleConfirmBooking = useCallback(async () => {
     if (!selectedSlotId || !room) return;
 
     setIsSubmitting(true);
-    const result = createBooking(room.id, selectedDate, selectedSlotId);
+
+    // 🔔 Xin quyền thông báo Just-in-Time ngay trước khi đặt phòng
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) {
+      // Thông báo người dùng đã tắt quyền, KHÔNG chặn luồng đặt phòng chính
+      Alert.alert(
+        'Thông báo nhắc nhở bị tắt',
+        'Bạn đã tắt thông báo, sẽ không nhận được nhắc nhở check-in trước giờ học 15 phút.',
+        [{ text: 'Đã hiểu, tiếp tục đặt' }]
+      );
+    }
+
+    const result = await createBooking(room.id, selectedDate, selectedSlotId);
     setIsSubmitting(false);
 
     // Đóng modal xác nhận

@@ -15,4 +15,5 @@ export interface Booking {
   status: BookingStatus;
   qrPayload: string;
   createdAt: string;
+  notificationId?: string | null;
 }

@@ -7,10 +7,7 @@ import { MOCK_BOOKINGS } from '../data/bookings';
 import { MOCK_USER } from '../data/mockUser';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { generateBookingId } from '../utils/idGenerator';
-import {
-  scheduleBookingReminder,
-  cancelScheduledNotification,
-} from '../utils/notifications';
+import { scheduleCheckInReminder, cancelReminder } from '../utils/notificationHelper';
 import { isSlotConflicting, hasUserConflict } from '../utils/conflictChecker';
 
 export interface BookingFilters {
@@ -45,9 +42,9 @@ export interface BookingState {
     roomId: string,
     date: string,
     timeSlotId: string
-  ) => { success: boolean; booking?: Booking; error?: string };
+  ) => Promise<{ success: boolean; booking?: Booking; error?: string }>;
 
-  cancelBooking: (bookingId: string) => void;
+  cancelBooking: (bookingId: string) => Promise<void>;
   getUserBookings: () => Booking[];
   getFilteredRooms: () => Room[];
 
@@ -129,7 +126,7 @@ export const useBookingStore = create<BookingState>()(
       },
 
       // 5. BOOKING CREATION WITH CONFLICT PREVENTION
-      createBooking: (roomId: string, date: string, timeSlotId: string) => {
+      createBooking: async (roomId: string, date: string, timeSlotId: string) => {
         const { rooms, bookings, currentUser } = get();
 
         // Kiểm tra phiên đăng nhập
@@ -195,12 +192,16 @@ export const useBookingStore = create<BookingState>()(
           status: 'upcoming',
           qrPayload,
           createdAt: new Date().toISOString(),
+          notificationId: null,
         };
 
-        // Lập lịch Local Notification nhắc trước 15 phút (chạy bất đồng bộ nền)
-        scheduleBookingReminder(newBooking, room, slot).catch(err => {
+        // Lập lịch Local Notification nhắc trước 15 phút và lưu notificationId vào booking object trước khi thêm vào state
+        try {
+          const notificationId = await scheduleCheckInReminder(newBooking, room, slot);
+          newBooking.notificationId = notificationId;
+        } catch (err) {
           console.warn('[useBookingStore] Lập lịch thông báo thất bại:', err);
-        });
+        }
 
         // Cập nhật State toàn cục
         set({
@@ -214,15 +215,19 @@ export const useBookingStore = create<BookingState>()(
       },
 
       // 6. CANCEL BOOKING
-      cancelBooking: (bookingId: string) => {
+      cancelBooking: async (bookingId: string) => {
         const { bookings } = get();
         const booking = bookings.find(b => b.id === bookingId);
         if (!booking) return;
 
-        // Hủy thông báo nhắc nhở đã lên lịch
-        cancelScheduledNotification(bookingId).catch(err => {
-          console.warn('[useBookingStore] Hủy thông báo thất bại:', err);
-        });
+        // Nếu booking có notificationId, gọi cancelReminder trước khi đổi status
+        if (booking.notificationId) {
+          try {
+            await cancelReminder(booking.notificationId);
+          } catch (err) {
+            console.warn('[useBookingStore] Hủy thông báo thất bại:', err);
+          }
+        }
 
         set({
           bookings: bookings.map(b =>
