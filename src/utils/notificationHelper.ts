@@ -1,54 +1,129 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { Booking, Room, TimeSlot } from '../types';
 import { get15MinutesBeforeSlot } from './dateHelpers';
 
 /**
  * ============================================================================
- * LƯU Ý KỸ THUẬT VỀ EXPO GO & EXPO MANAGED WORKFLOW (SDK 57+):
+ * LƯU Ý KỸ THUẬT VỀ EXPO GO & EXPO MANAGED WORKFLOW (SDK 53+ / SDK 57):
  * ----------------------------------------------------------------------------
- * 1. Từ Expo SDK 51 trở đi, Expo Go đã ngừng hỗ trợ Remote Push Notifications
- *    (thông báo đẩy từ xa qua FCM/APNs - yêu cầu tạo Expo Development Build).
- * 2. TUY NHIÊN, LOCAL NOTIFICATIONS (thông báo cục bộ theo thời gian đặt trước)
- *    như `scheduleNotificationAsync`, `cancelScheduledNotificationAsync`,
- *    và `setNotificationHandler` VẪN HOẠT ĐỘNG HOÀN TOÀN BÌNH THƯỜNG trong Expo Go
- *    và Expo Snack trong môi trường Managed Workflow.
- * 3. Mô-đun này CHỈ sử dụng API Local Notification, không phụ thuộc vào bất kỳ
- *    native config nâng cao nào đòi hỏi custom dev client.
+ * 1. Từ Expo SDK 51+, Expo Go trên Android đã gỡ bỏ hoàn toàn module Push (FCM),
+ *    bao gồm cả 'ExpoTopicSubscriptionModule'.
+ * 2. Để tránh lỗi Red Screen "[runtime not ready]: Error: Cannot find native module
+ *    'ExpoTopicSubscriptionModule'" khi chạy trên Expo Go / Expo Snack, module này
+ *    SỬ DỤNG DYNAMIC REQUIRE TRONG TRY/CATCH thay vì static import ở cấp cao nhất.
+ * 3. GRACEFUL DEGRADATION: Nếu native module không tồn tại trong môi trường hiện tại,
+ *    các hàm sẽ bắt lỗi an toàn (catch), ghi log cảnh báo và vô hiệu hóa riêng phần
+ *    thông báo nhắc nhở — ĐẢM BẢO toàn bộ ứng dụng (đặt phòng, QR, danh sách vé)
+ *    VẪN HOẠT ĐỘNG HOÀN TOÀN BÌNH THƯỜNG, KHÔNG BAO GIỜ CRASH APP.
  * ============================================================================
  */
 
 const ANDROID_CHANNEL_ID = 'study-room-alerts';
 
+let NotificationsModule: typeof import('expo-notifications') | null = null;
+let hasAttemptedLoad = false;
+
 /**
- * Thiết lập Android Notification Channel (cần thiết cho Android 8.0+ để phát âm thanh và hiển thị pop-up)
+ * Nạp module expo-notifications an toàn bằng dynamic require trong try/catch
+ */
+function getNotifications(): typeof import('expo-notifications') | null {
+  if (hasAttemptedLoad) {
+    return NotificationsModule;
+  }
+  hasAttemptedLoad = true;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('expo-notifications');
+    NotificationsModule = mod;
+    return NotificationsModule;
+  } catch (error: any) {
+    console.warn(
+      '[NotificationHelper] Thiết bị/môi trường này (Expo Go/Snack Android) không hỗ trợ notification native module.',
+      'Tính năng nhắc lịch 15 phút sẽ bị vô hiệu hóa an toàn (graceful fallback):',
+      error?.message || error
+    );
+    NotificationsModule = null;
+    return null;
+  }
+}
+
+/**
+ * Cấu hình handler hiển thị thông báo khi app đang ở foreground
+ */
+export const setupNotificationHandler = (): void => {
+  try {
+    const Notifications = getNotifications();
+    if (!Notifications || typeof Notifications.setNotificationHandler !== 'function') {
+      return;
+    }
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (error: any) {
+    console.warn(
+      '[NotificationHelper] Bỏ qua setupNotificationHandler:',
+      error?.message || error
+    );
+  }
+};
+
+/**
+ * Thiết lập Android Notification Channel (cần thiết cho Android 8.0+)
  */
 export const setupNotificationChannel = async (): Promise<void> => {
-  if (Platform.OS === 'android') {
-    try {
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-        name: 'Nhắc nhở nhận phòng học VKU',
-        description:
-          'Kênh gửi thông báo nhắc nhở 15 phút trước khi bắt đầu ca học tại VKU',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#1D4ED8',
-        sound: 'default',
-        enableVibrate: true,
-        showBadge: true,
-      });
-    } catch (error) {
-      console.warn('[NotificationHelper] Không thể tạo Android Channel:', error);
+  if (Platform.OS !== 'android') return;
+
+  try {
+    const Notifications = getNotifications();
+    if (
+      !Notifications ||
+      typeof Notifications.setNotificationChannelAsync !== 'function'
+    ) {
+      return;
     }
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: 'Nhắc nhở nhận phòng học VKU',
+      description: 'Kênh gửi thông báo nhắc nhở 15 phút trước khi bắt đầu ca học tại VKU',
+      importance: Notifications.AndroidImportance?.HIGH ?? 4,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#1D4ED8',
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
+    });
+  } catch (error: any) {
+    console.warn(
+      '[NotificationHelper] Bỏ qua setupNotificationChannel:',
+      error?.message || error
+    );
   }
 };
 
 /**
  * 1. Yêu cầu cấp quyền thông báo từ người dùng.
- * Xử lý an toàn: nếu người dùng từ chối, trả về false chứ không throw exception / crash app.
+ * Xử lý an toàn: nếu người dùng từ chối hoặc môi trường không hỗ trợ, trả về false, không crash.
  */
 export const requestNotificationPermission = async (): Promise<boolean> => {
   try {
+    const Notifications = getNotifications();
+    if (
+      !Notifications ||
+      typeof Notifications.getPermissionsAsync !== 'function' ||
+      typeof Notifications.requestPermissionsAsync !== 'function'
+    ) {
+      console.warn(
+        '[NotificationHelper] Notification native module không khả dụng trên môi trường này.'
+      );
+      return false;
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -69,8 +144,11 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     }
 
     return false;
-  } catch (error) {
-    console.warn('[NotificationHelper] Lỗi khi xin quyền thông báo:', error);
+  } catch (error: any) {
+    console.warn(
+      '[NotificationHelper] Lỗi khi xin quyền thông báo:',
+      error?.message || error
+    );
     return false;
   }
 };
@@ -79,11 +157,8 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
  * 2. Lập lịch thông báo cục bộ nhắc trước 15 phút giờ bắt đầu ca học.
  *
  * - Tính thời điểm trigger = (ngày + giờ bắt đầu slot) trừ đi 15 phút.
- * - Nếu thời điểm đó đã ở QUÁ KHỨ (ví dụ: người dùng đặt ca học đang diễn ra hoặc slot bắt đầu < 15 phút),
+ * - Nếu thời điểm đó đã ở QUÁ KHỨ hoặc môi trường không hỗ trợ notification:
  *   KHÔNG lên lịch, trả về null và ghi log lý do rõ ràng.
- * - Nội dung thông báo:
- *     Title: "Sắp đến giờ nhận phòng!"
- *     Body: "Phòng {room.name} - {slot} sẽ bắt đầu sau 15 phút. Hãy đến check-in đúng giờ."
  *
  * @returns notificationId (string) nếu lên lịch thành công, hoặc null nếu bỏ qua/lỗi.
  */
@@ -93,11 +168,19 @@ export const scheduleCheckInReminder = async (
   timeSlot: TimeSlot
 ): Promise<string | null> => {
   try {
+    const Notifications = getNotifications();
+    if (!Notifications || typeof Notifications.scheduleNotificationAsync !== 'function') {
+      console.warn(
+        '[NotificationHelper] Notification native module không khả dụng, bỏ qua lập lịch nhắc nhở.'
+      );
+      return null;
+    }
+
     // 1. Kiểm tra quyền thông báo trước khi lên lịch
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) {
       console.log(
-        '[NotificationHelper] Quyền thông báo chưa được cấp. Bỏ qua lập lịch nhắc nhở.'
+        '[NotificationHelper] Quyền thông báo chưa được cấp hoặc môi trường không hỗ trợ. Bỏ qua lập lịch nhắc nhở.'
       );
       return null;
     }
@@ -130,18 +213,21 @@ export const scheduleCheckInReminder = async (
         },
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        type: Notifications.SchedulableTriggerInputTypes?.DATE ?? 'date',
         date: triggerDate,
         channelId: Platform.OS === 'android' ? ANDROID_CHANNEL_ID : undefined,
-      },
+      } as any,
     });
 
     console.log(
       `[NotificationHelper] Đã lên lịch nhắc nhở thành công. Notification ID: ${notificationId}, thời điểm báo: ${triggerDate.toLocaleString('vi-VN')}`
     );
     return notificationId;
-  } catch (error) {
-    console.warn('[NotificationHelper] Lỗi khi lập lịch thông báo nhắc nhở:', error);
+  } catch (error: any) {
+    console.warn(
+      '[NotificationHelper] Lỗi khi lập lịch thông báo nhắc nhở:',
+      error?.message || error
+    );
     return null;
   }
 };
@@ -153,12 +239,19 @@ export const cancelReminder = async (notificationId: string): Promise<void> => {
   if (!notificationId) return;
 
   try {
+    const Notifications = getNotifications();
+    if (
+      !Notifications ||
+      typeof Notifications.cancelScheduledNotificationAsync !== 'function'
+    ) {
+      return;
+    }
     await Notifications.cancelScheduledNotificationAsync(notificationId);
     console.log(`[NotificationHelper] Đã hủy thông báo ID: ${notificationId}`);
-  } catch (error) {
+  } catch (error: any) {
     console.warn(
       `[NotificationHelper] Lỗi khi hủy thông báo ID ${notificationId}:`,
-      error
+      error?.message || error
     );
   }
 };

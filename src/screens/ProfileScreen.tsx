@@ -9,10 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBookingStore } from '../store/useBookingStore';
-import {
-  requestNotificationPermission,
-  scheduleCheckInReminder,
-} from '../utils/notificationHelper';
+import { requestNotificationPermission } from '../utils/notificationHelper';
 import { COLORS } from '../constants/colors';
 
 export const ProfileScreen: React.FC = () => {
