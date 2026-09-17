@@ -24,11 +24,16 @@ export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
 
   const currentUser = useBookingStore(state => state.currentUser);
+  const rooms = useBookingStore(state => state.rooms);
+  const filters = useBookingStore(state => state.filters);
   const getFilteredRooms = useBookingStore(state => state.getFilteredRooms);
   const resetFilters = useBookingStore(state => state.resetFilters);
 
-  // Lấy danh sách phòng đã áp dụng bộ lọc từ store
-  const filteredRooms = getFilteredRooms();
+  // Lấy danh sách phòng đã áp dụng bộ lọc từ store (reactive với filters và rooms)
+  const filteredRooms = useMemo(
+    () => getFilteredRooms(),
+    [getFilteredRooms, filters, rooms]
+  );
 
   // Navigation sang chi tiết phòng được memo hóa
   const handleRoomPress = useCallback(

@@ -11,11 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { HomeStackParamList } from '../navigation/types';
+import { Booking } from '../types';
 import { useBookingStore } from '../store/useBookingStore';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { DateSelector } from '../components/DateSelector';
 import { TimeSlotGrid } from '../components/TimeSlotGrid';
 import { BookingConfirmModal } from '../components/BookingConfirmModal';
+import { QRBookingModal } from '../components/QRBookingModal';
 import { getTodayString } from '../utils/dateHelpers';
 import { COLORS } from '../constants/colors';
 
@@ -37,6 +39,8 @@ export const RoomDetailScreen: React.FC = () => {
   );
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+  const [isQRModalVisible, setIsQRModalVisible] = useState(false);
+  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Tìm đối tượng TimeSlot tương ứng với slot đang chọn
@@ -62,13 +66,9 @@ export const RoomDetailScreen: React.FC = () => {
     setIsConfirmModalVisible(false);
 
     if (result.success && result.booking) {
-      // Đặt phòng thành công
-      // TODO: Connect to QR modal in the next step
-      Alert.alert(
-        '🎉 Đặt phòng thành công!',
-        `Mã vé: ${result.booking.id}\nPhòng: ${room.name}\nKhung giờ: ${currentSlot?.startTime} - ${currentSlot?.endTime}`,
-        [{ text: 'Hoàn tất' }]
-      );
+      // Đặt phòng thành công -> Mở trực tiếp vé điện tử QRBookingModal
+      setCreatedBooking(result.booking);
+      setIsQRModalVisible(true);
       // Reset trạng thái chọn sau khi đặt thành công
       setSelectedSlotId(null);
     } else {
@@ -82,7 +82,7 @@ export const RoomDetailScreen: React.FC = () => {
       // Tự động giải phóng slot đã chọn để refresh lại lưới
       setSelectedSlotId(null);
     }
-  }, [selectedSlotId, room, selectedDate, createBooking, currentSlot]);
+  }, [selectedSlotId, room, selectedDate, createBooking]);
 
   if (!room) {
     return (
@@ -235,6 +235,17 @@ export const RoomDetailScreen: React.FC = () => {
         isSubmitting={isSubmitting}
         onConfirm={handleConfirmBooking}
         onCancel={() => setIsConfirmModalVisible(false)}
+      />
+
+      {/* 8. Modal vé điện tử QR Check-in */}
+      <QRBookingModal
+        visible={isQRModalVisible}
+        booking={createdBooking}
+        room={room}
+        onClose={() => {
+          setIsQRModalVisible(false);
+          setCreatedBooking(null);
+        }}
       />
     </SafeAreaView>
   );

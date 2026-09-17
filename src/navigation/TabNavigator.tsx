@@ -38,7 +38,7 @@ export const TabNavigator: React.FC = () => {
         name="MyBookingsTab"
         component={MyBookingsScreen}
         options={{
-          tabBarLabel: 'Vé của tôi',
+          tabBarLabel: 'Đặt phòng của tôi',
           tabBarBadge: activeBookingsCount > 0 ? activeBookingsCount : undefined,
           tabBarBadgeStyle: styles.badge,
           tabBarIcon: ({ focused }) => (
