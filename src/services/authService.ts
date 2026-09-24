@@ -45,50 +45,56 @@ export const registerWithEmail = async (
   displayName: string,
   studentId: string
 ): Promise<User> => {
-  const credential: UserCredential = await createUserWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-  const firebaseUser = credential.user;
-
-  // Cập nhật displayName trên Firebase Auth profile
   try {
-    await updateProfile(firebaseUser, { displayName: displayName.trim() });
-  } catch (err) {
-    console.warn('[authService] Không thể cập nhật Auth displayName:', err);
-  }
+    console.log('[Register] Bắt đầu đăng ký với email:', email);
+    console.log('[Register] Đang gọi createUserWithEmailAndPassword...');
+    const userCredential: UserCredential = await createUserWithEmailAndPassword(
+      auth,
+      email.trim(),
+      password
+    );
+    console.log(
+      '[Register] Tạo tài khoản Auth thành công, uid =',
+      userCredential.user.uid
+    );
+    const firebaseUser = userCredential.user;
 
-  const nowIso = new Date().toISOString();
-  const profileData = {
-    displayName: displayName.trim(),
-    studentId: studentId.trim().toUpperCase(),
-    email: email.trim().toLowerCase(),
-    createdAt: nowIso,
-  };
+    // Cập nhật displayName trên Firebase Auth profile
+    try {
+      await updateProfile(firebaseUser, { displayName: displayName.trim() });
+    } catch (err) {
+      console.warn('[authService] Không thể cập nhật Auth displayName:', err);
+    }
 
-  // Lưu thông tin sinh viên mở rộng vào Firestore collection "users" với doc ID = uid
-  try {
+    const nowIso = new Date().toISOString();
+    const profileData = {
+      displayName: displayName.trim(),
+      studentId: studentId.trim().toUpperCase(),
+      email: email.trim().toLowerCase(),
+      createdAt: nowIso,
+    };
+
+    // Lưu thông tin sinh viên mở rộng vào Firestore collection "users" với doc ID = uid
+    console.log('[Register] Đang ghi thông tin user vào Firestore...');
     const userDocRef = doc(db, 'users', firebaseUser.uid);
     await setDoc(userDocRef, profileData);
-  } catch (err) {
-    console.warn(
-      '[authService] Lưu thông tin Firestore user thất bại (kiểm tra Rules):',
-      err
-    );
+    console.log('[Register] Ghi Firestore thành công, hoàn tất đăng ký');
+
+    const fullUser: User = {
+      uid: firebaseUser.uid,
+      id: firebaseUser.uid,
+      email: firebaseUser.email || email.trim(),
+      displayName: displayName.trim(),
+      name: displayName.trim(),
+      studentId: studentId.trim().toUpperCase(),
+      createdAt: nowIso,
+    };
+
+    return fullUser;
+  } catch (error: any) {
+    console.log('[Register] LỖI:', error?.code, error?.message);
+    throw error;
   }
-
-  const fullUser: User = {
-    uid: firebaseUser.uid,
-    id: firebaseUser.uid,
-    email: firebaseUser.email || email.trim(),
-    displayName: displayName.trim(),
-    name: displayName.trim(),
-    studentId: studentId.trim().toUpperCase(),
-    createdAt: nowIso,
-  };
-
-  return fullUser;
 };
 
 /**

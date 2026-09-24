@@ -57,6 +57,12 @@ export const LoginScreen: React.FC = () => {
 
   // Xử lý Đăng Ký
   const handleRegister = async () => {
+    console.log('[UI] Nút Đăng ký được bấm với:', {
+      email: registerEmail,
+      displayName: registerName,
+      studentId: registerStudentId,
+    });
+
     const cleanName = registerName.trim();
     const cleanStudentId = registerStudentId.trim().toUpperCase();
     const cleanEmail = registerEmail.trim();
