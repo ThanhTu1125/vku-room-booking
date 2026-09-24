@@ -149,7 +149,7 @@ export const QRBookingModal: React.FC<QRBookingModalProps> = ({
                 <Text style={styles.codeHighlight}>{shortBookingId}</Text>
                 <Text style={styles.studentLabel}>
                   {' '}
-                  • Sinh viên: {currentUser?.studentId || '23IT296'}
+                  • Sinh viên: {currentUser?.studentId || 'VKU'}
                 </Text>
               </View>
             </View>

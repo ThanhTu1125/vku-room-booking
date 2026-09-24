@@ -114,7 +114,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.welcomeTitle}>VKU Study Space 🎓</Text>
         </View>
         <View style={styles.userBadge}>
-          <Text style={styles.userBadgeText}>{currentUser?.studentId || '23IT296'}</Text>
+          <Text style={styles.userBadgeText}>{currentUser?.studentId || 'VKU'}</Text>
         </View>
       </View>
 

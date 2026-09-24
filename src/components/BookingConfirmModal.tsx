@@ -94,12 +94,14 @@ export const BookingConfirmModal: React.FC<BookingConfirmModalProps> = ({
 
               <View style={styles.row}>
                 <Text style={styles.label}>Người đặt:</Text>
-                <Text style={styles.value}>{currentUser?.name || 'Sinh viên VKU'}</Text>
+                <Text style={styles.value}>
+                  {currentUser?.displayName || currentUser?.name || 'Sinh viên VKU'}
+                </Text>
               </View>
 
               <View style={styles.row}>
                 <Text style={styles.label}>MSSV:</Text>
-                <Text style={styles.value}>{currentUser?.studentId || '23IT296'}</Text>
+                <Text style={styles.value}>{currentUser?.studentId || 'VKU'}</Text>
               </View>
             </View>
 

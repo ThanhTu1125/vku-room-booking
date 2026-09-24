@@ -108,16 +108,19 @@ export const ProfileScreen: React.FC = () => {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
               {currentUser
-                ? currentUser.name
+                ? (currentUser.displayName || currentUser.name || 'SV')
+                    .trim()
                     .split(' ')
+                    .filter(Boolean)
                     .map(n => n[0])
                     .join('')
                     .slice(-2)
+                    .toUpperCase()
                 : 'SV'}
             </Text>
           </View>
           <Text style={styles.userName}>
-            {currentUser ? currentUser.name : 'Khách vãng lai'}
+            {currentUser ? currentUser.displayName || currentUser.name : 'Khách vãng lai'}
           </Text>
           {currentUser ? (
             <>

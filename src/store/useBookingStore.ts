@@ -4,11 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, Room, Booking, Building, Equipment, TimeSlot } from '../types';
 import { MOCK_ROOMS } from '../data/rooms';
 import { MOCK_BOOKINGS } from '../data/bookings';
-import { MOCK_USER } from '../data/mockUser';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { generateBookingId } from '../utils/idGenerator';
 import { scheduleCheckInReminder, cancelReminder } from '../utils/notificationHelper';
 import { isSlotConflicting, hasUserConflict } from '../utils/conflictChecker';
+import { authService } from '../services/authService';
 
 export interface BookingFilters {
   searchText: string;
@@ -20,6 +20,7 @@ export interface BookingFilters {
 export interface BookingState {
   // STATE
   currentUser: User | null;
+  isAuthChecking: boolean;
   rooms: Room[];
   bookings: Booking[];
   filters: BookingFilters;
@@ -27,8 +28,9 @@ export interface BookingState {
 
   // ACTIONS
   setHasHydrated: (hasHydrated: boolean) => void;
-  login: (user: User) => void;
-  logout: () => void;
+  setIsAuthChecking: (isChecking: boolean) => void;
+  setCurrentUser: (user: User | null) => void;
+  logout: () => Promise<void>;
   setSearchText: (text: string) => void;
   toggleBuildingFilter: (building: Building) => void;
   toggleEquipmentFilter: (equipment: Equipment) => void;
@@ -68,6 +70,7 @@ export const useBookingStore = create<BookingState>()(
     (set, get) => ({
       // 1. STATE
       currentUser: null,
+      isAuthChecking: true,
       rooms: MOCK_ROOMS,
       bookings: MOCK_BOOKINGS,
       filters: INITIAL_FILTERS,
@@ -75,8 +78,16 @@ export const useBookingStore = create<BookingState>()(
 
       // 2. AUTH & HYDRATION ACTIONS
       setHasHydrated: (hasHydrated: boolean) => set({ _hasHydrated: hasHydrated }),
-      login: (user: User) => set({ currentUser: user }),
-      logout: () => set({ currentUser: null }),
+      setIsAuthChecking: (isChecking: boolean) => set({ isAuthChecking: isChecking }),
+      setCurrentUser: (user: User | null) => set({ currentUser: user }),
+      logout: async () => {
+        try {
+          await authService.logout();
+        } catch (err) {
+          console.warn('[useBookingStore] Đăng xuất thất bại:', err);
+        }
+        set({ currentUser: null });
+      },
 
       // 3. FILTER ACTIONS
       setSearchText: (searchText: string) =>
@@ -88,13 +99,12 @@ export const useBookingStore = create<BookingState>()(
         set(state => {
           const current = state.filters.buildings;
           const exists = current.includes(building);
+          const newBuildings = exists
+            ? current.filter(b => b !== building)
+            : [...current, building];
+
           return {
-            filters: {
-              ...state.filters,
-              buildings: exists
-                ? current.filter(b => b !== building)
-                : [...current, building],
-            },
+            filters: { ...state.filters, buildings: newBuildings },
           };
         }),
 
@@ -102,31 +112,36 @@ export const useBookingStore = create<BookingState>()(
         set(state => {
           const current = state.filters.equipment;
           const exists = current.includes(equipment);
+          const newEquipment = exists
+            ? current.filter(e => e !== equipment)
+            : [...current, equipment];
+
           return {
-            filters: {
-              ...state.filters,
-              equipment: exists
-                ? current.filter(e => e !== equipment)
-                : [...current, equipment],
-            },
+            filters: { ...state.filters, equipment: newEquipment },
           };
         }),
 
-      setCapacityRange: (capacityRange: [number, number] | null) =>
+      setCapacityRange: (range: [number, number] | null) =>
         set(state => ({
-          filters: { ...state.filters, capacityRange },
+          filters: { ...state.filters, capacityRange: range },
         })),
 
-      resetFilters: () => set({ filters: INITIAL_FILTERS }),
+      resetFilters: () =>
+        set({
+          filters: INITIAL_FILTERS,
+        }),
 
-      // 4. SLOT AVAILABILITY QUERY
+      // 4. GET AVAILABLE SLOTS FOR A ROOM ON A SPECIFIC DATE
       getAvailableSlotsForRoom: (roomId: string, date: string) => {
         const { bookings } = get();
 
-        return TIME_SLOTS.map(slot => ({
-          slot,
-          isBooked: isSlotConflicting(bookings, roomId, date, slot.id),
-        }));
+        return TIME_SLOTS.map(slot => {
+          const isBooked = isSlotConflicting(bookings, roomId, date, slot.id);
+          return {
+            slot,
+            isBooked,
+          };
+        });
       },
 
       // 5. BOOKING CREATION WITH CONFLICT PREVENTION
@@ -140,6 +155,8 @@ export const useBookingStore = create<BookingState>()(
             error: 'Vui lòng đăng nhập tài khoản sinh viên trước khi đặt phòng.',
           };
         }
+
+        const currentUserId = currentUser.uid || currentUser.id || '';
 
         // Kiểm tra phòng học tồn tại
         const room = rooms.find(r => r.id === roomId);
@@ -168,7 +185,7 @@ export const useBookingStore = create<BookingState>()(
         }
 
         // 🛡️ DOUBLE-CHECK: Kiểm tra sinh viên có bị trùng lịch học cá nhân không
-        if (hasUserConflict(bookings, currentUser.id, date, timeSlotId)) {
+        if (hasUserConflict(bookings, currentUserId, date, timeSlotId)) {
           return {
             success: false,
             error: `Bạn đã có một lịch đặt phòng khác trong khung giờ ${slot.startTime} - ${slot.endTime} ngày ${date}. Không thể đặt 2 phòng cùng lúc.`,
@@ -182,7 +199,7 @@ export const useBookingStore = create<BookingState>()(
           roomId,
           date,
           timeSlotId,
-          userId: currentUser.id,
+          userId: currentUserId,
           studentId: currentUser.studentId,
           timestamp: Date.now(),
         });
@@ -190,7 +207,7 @@ export const useBookingStore = create<BookingState>()(
         const newBooking: Booking = {
           id: newBookingId,
           roomId,
-          userId: currentUser.id,
+          userId: currentUserId,
           date,
           timeSlotId,
           status: 'upcoming',
@@ -245,8 +262,10 @@ export const useBookingStore = create<BookingState>()(
         const { bookings, currentUser } = get();
         if (!currentUser) return [];
 
+        const currentUserId = currentUser.uid || currentUser.id || '';
+
         return bookings
-          .filter(b => b.userId === currentUser.id)
+          .filter(b => b.userId === currentUserId)
           .sort((a, b) => {
             const dateCompare = b.date.localeCompare(a.date);
             if (dateCompare !== 0) return dateCompare;
@@ -313,7 +332,6 @@ export const useBookingStore = create<BookingState>()(
 
       resetToMockData: () => {
         set({
-          currentUser: MOCK_USER,
           rooms: MOCK_ROOMS,
           bookings: MOCK_BOOKINGS,
           filters: INITIAL_FILTERS,
@@ -324,7 +342,6 @@ export const useBookingStore = create<BookingState>()(
       name: 'study-room-booking-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: state => ({
-        currentUser: state.currentUser,
         bookings: state.bookings,
       }),
       onRehydrateStorage: () => state => {

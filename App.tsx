@@ -2,6 +2,11 @@ import React, { useEffect } from 'react';
 import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './src/config/firebase';
+import { useBookingStore } from './src/store/useBookingStore';
+import { User } from './src/types';
 import { RootNavigator } from './src/navigation';
 import {
   setupNotificationHandler,
@@ -25,6 +30,53 @@ export default function App() {
     setupNotificationChannel().catch(err => {
       console.log('[App] Không thể khởi tạo Android Notification Channel (an toàn):', err);
     });
+
+    // Lắng nghe thay đổi trạng thái đăng nhập Firebase Authentication
+    const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
+      try {
+        if (firebaseUser) {
+          let userProfileData: any = null;
+          try {
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              userProfileData = userDocSnap.data();
+            }
+          } catch (err) {
+            console.warn('[App] Lỗi khi đọc user profile từ Firestore:', err);
+          }
+
+          const fullUser: User = {
+            uid: firebaseUser.uid,
+            id: firebaseUser.uid,
+            email: firebaseUser.email || userProfileData?.email || '',
+            displayName:
+              userProfileData?.displayName ||
+              firebaseUser.displayName ||
+              'Sinh viên VKU',
+            name:
+              userProfileData?.displayName ||
+              firebaseUser.displayName ||
+              'Sinh viên VKU',
+            studentId: userProfileData?.studentId || '',
+            createdAt: userProfileData?.createdAt || new Date().toISOString(),
+          };
+
+          useBookingStore.getState().setCurrentUser(fullUser);
+        } else {
+          useBookingStore.getState().setCurrentUser(null);
+        }
+      } catch (err) {
+        console.warn('[App] Lỗi xử lý onAuthStateChanged:', err);
+        useBookingStore.getState().setCurrentUser(null);
+      } finally {
+        useBookingStore.getState().setIsAuthChecking(false);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   return (

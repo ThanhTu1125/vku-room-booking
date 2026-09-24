@@ -9,43 +9,113 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBookingStore } from '../store/useBookingStore';
-import { MOCK_USER } from '../data/mockUser';
+import { authService, mapAuthError } from '../services/authService';
 import { COLORS } from '../constants/colors';
-import { User } from '../types';
+
+type AuthMode = 'login' | 'register';
 
 export const LoginScreen: React.FC = () => {
-  const login = useBookingStore(state => state.login);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [loading, setLoading] = useState(false);
 
-  const [name, setName] = useState('');
-  const [studentId, setStudentId] = useState('');
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
-  const handleLogin = () => {
-    const cleanName = name.trim();
-    const cleanId = studentId.trim().toUpperCase();
+  // Register form state
+  const [registerName, setRegisterName] = useState('');
+  const [registerStudentId, setRegisterStudentId] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-    if (!cleanName || !cleanId) {
+  // Xử lý Đăng Nhập
+  const handleLogin = async () => {
+    const cleanEmail = loginEmail.trim();
+    const cleanPass = loginPassword.trim();
+
+    if (!cleanEmail || !cleanPass) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập đầy đủ email và mật khẩu.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authService.loginWithEmail(cleanEmail, cleanPass);
+      // Khi thành công, onAuthStateChanged tại App.tsx sẽ tự động cập nhật store và điều hướng
+    } catch (error: any) {
+      const errorCode = error?.code || '';
+      const message = mapAuthError(errorCode);
+      Alert.alert('Đăng nhập thất bại', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Xử lý Đăng Ký
+  const handleRegister = async () => {
+    const cleanName = registerName.trim();
+    const cleanStudentId = registerStudentId.trim().toUpperCase();
+    const cleanEmail = registerEmail.trim();
+    const cleanPass = registerPassword;
+    const cleanConfirm = confirmPassword;
+
+    // 1. Kiểm tra không để trống trường nào
+    if (!cleanName || !cleanStudentId || !cleanEmail || !cleanPass || !cleanConfirm) {
       Alert.alert(
         'Thông tin chưa đầy đủ',
-        'Vui lòng nhập cả họ tên và mã số sinh viên (MSSV) để tiếp tục.'
+        'Vui lòng điền đầy đủ tất cả các trường để đăng ký tài khoản.'
       );
       return;
     }
 
-    const newUser: User = {
-      id: `user-${cleanId.toLowerCase()}`,
-      name: cleanName,
-      studentId: cleanId,
-      email: `${cleanId.toLowerCase()}@vku.udn.vn`,
-    };
+    // 2. Validate định dạng email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      Alert.alert(
+        'Email không hợp lệ',
+        'Vui lòng nhập đúng định dạng email (VD: sinhvien@vku.udn.vn).'
+      );
+      return;
+    }
 
-    login(newUser);
-  };
+    // 3. Validate mật khẩu tối thiểu 6 ký tự
+    if (cleanPass.length < 6) {
+      Alert.alert(
+        'Mật khẩu quá ngắn',
+        'Mật khẩu cần tối thiểu 6 ký tự để đảm bảo an toàn.'
+      );
+      return;
+    }
 
-  const handleQuickLoginMock = () => {
-    login(MOCK_USER);
+    // 4. Validate mật khẩu xác nhận khớp nhau
+    if (cleanPass !== cleanConfirm) {
+      Alert.alert(
+        'Mật khẩu không khớp',
+        'Mật khẩu xác nhận không trùng khớp với mật khẩu đã nhập.'
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authService.registerWithEmail(
+        cleanEmail,
+        cleanPass,
+        cleanName,
+        cleanStudentId
+      );
+      // Khi thành công, onAuthStateChanged tại App.tsx sẽ tự động cập nhật store và điều hướng
+    } catch (error: any) {
+      const errorCode = error?.code || '';
+      const message = mapAuthError(errorCode);
+      Alert.alert('Đăng ký thất bại', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -70,66 +140,189 @@ export const LoginScreen: React.FC = () => {
             </Text>
           </View>
 
-          {/* Login Card */}
+          {/* Card Container */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Đăng Nhập Sinh Viên</Text>
-            <Text style={styles.cardDesc}>
-              Nhập thông tin sinh viên VKU để đặt phòng và mở khóa cửa bằng QR pass
-            </Text>
+            {/* Segmented Tab Bar */}
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tabButton, authMode === 'login' && styles.tabButtonActive]}
+                activeOpacity={0.8}
+                onPress={() => setAuthMode('login')}
+                disabled={loading}
+              >
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    authMode === 'login' && styles.tabButtonTextActive,
+                  ]}
+                >
+                  Đăng Nhập
+                </Text>
+              </TouchableOpacity>
 
-            {/* Input Name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Họ và tên sinh viên</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: Nguyễn Văn A"
-                placeholderTextColor={COLORS.textSubtle}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
+              <TouchableOpacity
+                style={[
+                  styles.tabButton,
+                  authMode === 'register' && styles.tabButtonActive,
+                ]}
+                activeOpacity={0.8}
+                onPress={() => setAuthMode('register')}
+                disabled={loading}
+              >
+                <Text
+                  style={[
+                    styles.tabButtonText,
+                    authMode === 'register' && styles.tabButtonTextActive,
+                  ]}
+                >
+                  Đăng Ký
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Input Student ID */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Mã số sinh viên (MSSV)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: 23IT296"
-                placeholderTextColor={COLORS.textSubtle}
-                value={studentId}
-                onChangeText={setStudentId}
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
-            </View>
+            {authMode === 'login' ? (
+              /* FORM ĐĂNG NHẬP */
+              <View>
+                <Text style={styles.cardTitle}>Đăng Nhập Sinh Viên</Text>
+                <Text style={styles.cardDesc}>
+                  Đăng nhập bằng tài khoản email để quản lý đặt phòng và mở khóa cửa
+                </Text>
 
-            {/* Primary Submit Button */}
-            <TouchableOpacity
-              style={styles.loginBtn}
-              activeOpacity={0.85}
-              onPress={handleLogin}
-            >
-              <Text style={styles.loginBtnText}>Đăng Nhập Ngay</Text>
-            </TouchableOpacity>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Email sinh viên</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="VD: tunt.23it@vku.udn.vn"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={loginEmail}
+                    onChangeText={setLoginEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                </View>
 
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>HOẶC</Text>
-              <View style={styles.dividerLine} />
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Mật khẩu</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={loginPassword}
+                    onChangeText={setLoginPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+                </View>
 
-            {/* 1-Tap Mock User Button for Testing Convenience */}
-            <TouchableOpacity
-              style={styles.quickLoginBtn}
-              activeOpacity={0.8}
-              onPress={handleQuickLoginMock}
-            >
-              <Text style={styles.quickLoginBtnText}>
-                ⚡ Đăng nhập tài khoản mẫu ({MOCK_USER.studentId})
-              </Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                  activeOpacity={0.85}
+                  onPress={handleLogin}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Đăng Nhập</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* FORM ĐĂNG KÝ */
+              <View>
+                <Text style={styles.cardTitle}>Tạo Tài Khoản Mới</Text>
+                <Text style={styles.cardDesc}>
+                  Đăng ký thông tin sinh viên VKU để bắt đầu sử dụng phòng học & lab
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Họ và tên sinh viên</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="VD: Nguyễn Văn A"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={registerName}
+                    onChangeText={setRegisterName}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Mã số sinh viên (MSSV)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="VD: 23IT296"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={registerStudentId}
+                    onChangeText={setRegisterStudentId}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Email sinh viên</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="VD: sinhvien@vku.udn.vn"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={registerEmail}
+                    onChangeText={setRegisterEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Mật khẩu</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Tối thiểu 6 ký tự"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={registerPassword}
+                    onChangeText={setRegisterPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Xác nhận mật khẩu</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Nhập lại mật khẩu phía trên"
+                    placeholderTextColor={COLORS.textSubtle}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                  activeOpacity={0.85}
+                  onPress={handleRegister}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Đăng Ký Tài Khoản</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {/* Footer note */}
@@ -163,7 +356,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   logoBadge: {
     backgroundColor: COLORS.primary,
@@ -209,6 +402,38 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 4,
   },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background,
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabButtonActive: {
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  tabButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: '800',
@@ -222,7 +447,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   inputLabel: {
     fontSize: 13,
@@ -240,55 +465,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
   },
-  loginBtn: {
+  primaryBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 8,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 3,
   },
-  loginBtnText: {
+  btnDisabled: {
+    opacity: 0.65,
+  },
+  primaryBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
   },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.divider,
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSubtle,
-  },
-  quickLoginBtn: {
-    backgroundColor: COLORS.primarySoft,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  quickLoginBtnText: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
   footer: {
     alignItems: 'center',
-    marginTop: 28,
+    marginTop: 24,
   },
   footerText: {
     fontSize: 12,

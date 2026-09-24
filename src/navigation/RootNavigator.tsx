@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,19 +13,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator: React.FC = () => {
   const currentUser = useBookingStore(state => state.currentUser);
+  const isAuthChecking = useBookingStore(state => state.isAuthChecking);
   const hasHydrated = useBookingStore(state => state._hasHydrated);
-  const [isReady, setIsReady] = useState(false);
 
-  // Đảm bảo không bị treo splash nếu rehydration hoàn tất cực nhanh
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsReady(true);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // 1. Màn hình Splash/Loading khi app đang hydrate dữ liệu từ AsyncStorage
-  if (!hasHydrated && !isReady) {
+  // 1. Màn hình Splash/Loading khi Firebase đang kiểm tra session hoặc store đang hydrate
+  if (isAuthChecking || !hasHydrated) {
     return (
       <View style={styles.splashContainer}>
         <View style={styles.logoBadge}>
@@ -34,6 +26,7 @@ export const RootNavigator: React.FC = () => {
         <Text style={styles.splashTitle}>VKU Study Space</Text>
         <Text style={styles.splashSubtitle}>Hệ thống Đặt phòng học & Phòng Lab</Text>
         <ActivityIndicator size="large" color={COLORS.primary} style={styles.spinner} />
+        <Text style={styles.checkingText}>Đang xác thực thông tin...</Text>
       </View>
     );
   }
@@ -111,9 +104,14 @@ const styles = StyleSheet.create({
   splashSubtitle: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   spinner: {
     marginTop: 8,
+  },
+  checkingText: {
+    fontSize: 12,
+    color: COLORS.textSubtle,
+    marginTop: 12,
   },
 });
