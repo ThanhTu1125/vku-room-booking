@@ -33,15 +33,7 @@
 
 ---
 
-## 4. EMPIRICAL EVIDENCE & SCREENSHOTS
-*(Please replace placeholders with actual relative paths to your screenshots in the `assets/` folder)*
-* `[Screenshot 1]` - Auth & Discovery Dashboard showing Real-time Availability.
-* `[Screenshot 2]` - Time-slot Grid illustrating Transactional Locks (Reserved vs. Available).
-* `[Screenshot 3]` - My Bookings & Generated QR Code Modal.
-
----
-
-## 5. TECHNICAL CHALLENGES & RESOLUTIONS
+## 4. TECHNICAL CHALLENGES & RESOLUTIONS
 * **Challenge 1: Native Module Exceptions in Expo Go Environment:**
   * *Bottleneck:* The integration of `expo-notifications` triggered fatal `NullPointerException` errors on Android Expo Go due to the deprecation of `NotificationsChannelsProvider` in recent SDKs.
   * *Resolution:* Engineered an environment-detection utility utilizing `expo-constants` to dynamically bypass native channel configurations (`setNotificationChannelAsync`) when executing inside the Expo Go client, ensuring uninterrupted runtime stability without compromising bare-workflow functionality.
