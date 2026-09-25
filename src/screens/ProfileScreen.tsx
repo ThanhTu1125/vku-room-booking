@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBookingStore } from '../store/useBookingStore';
 import { requestNotificationPermission } from '../utils/notificationHelper';
 import { COLORS } from '../constants/colors';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 
 export const ProfileScreen: React.FC = () => {
   const currentUser = useBookingStore(state => state.currentUser);
@@ -25,12 +26,11 @@ export const ProfileScreen: React.FC = () => {
   }, [bookings, getUserBookings]);
 
   const upcomingCount = useMemo(() => {
-    return userBookings.filter(b => b.status === 'upcoming' || b.status === 'checked-in')
-      .length;
+    return userBookings.filter(b => getBookingDisplayStatus(b) === 'upcoming').length;
   }, [userBookings]);
 
   const completedCount = useMemo(() => {
-    return userBookings.filter(b => b.status === 'completed').length;
+    return userBookings.filter(b => getBookingDisplayStatus(b) === 'past').length;
   }, [userBookings]);
 
   // Test kích hoạt Local Notification

@@ -6,6 +6,7 @@ import { Booking, Room } from '../types';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
 import { formatDisplayDate, formatSlotLabel } from '../utils/dateHelpers';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 import { useBookingStore } from '../store/useBookingStore';
 
 interface QRModalProps {
@@ -28,9 +29,10 @@ export const QRModal: React.FC<QRModalProps> = ({
 
   if (!booking) return null;
 
-  const isCheckedIn = booking.status === 'checked-in';
+  const displayStatus = getBookingDisplayStatus(booking);
   const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
-  const timeText = slot ? formatSlotLabel(slot) : booking.timeSlotId;
+  const timeText =
+    booking.timeSlotLabel || (slot ? formatSlotLabel(slot) : booking.timeSlotId);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -80,7 +82,11 @@ export const QRModal: React.FC<QRModalProps> = ({
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Phòng học:</Text>
               <Text style={styles.infoValue}>
-                {room ? `${room.name} (Tòa ${room.building})` : booking.roomId}
+                {room
+                  ? `${room.name} (Tòa ${room.building})`
+                  : booking.roomName
+                    ? `${booking.roomName} (Tòa ${booking.building})`
+                    : booking.roomId}
               </Text>
             </View>
 
@@ -108,9 +114,12 @@ export const QRModal: React.FC<QRModalProps> = ({
                 style={[
                   styles.statusBadge,
                   {
-                    backgroundColor: isCheckedIn
-                      ? COLORS.successSoft
-                      : COLORS.primarySoft,
+                    backgroundColor:
+                      displayStatus === 'cancelled'
+                        ? COLORS.occupiedSoft
+                        : displayStatus === 'past'
+                          ? COLORS.divider
+                          : COLORS.primarySoft,
                   },
                 ]}
               >
@@ -118,11 +127,20 @@ export const QRModal: React.FC<QRModalProps> = ({
                   style={[
                     styles.statusText,
                     {
-                      color: isCheckedIn ? COLORS.success : COLORS.primary,
+                      color:
+                        displayStatus === 'cancelled'
+                          ? COLORS.occupied
+                          : displayStatus === 'past'
+                            ? COLORS.textMuted
+                            : COLORS.primary,
                     },
                   ]}
                 >
-                  {isCheckedIn ? '✓ Đã Check-in' : 'Chờ Check-in'}
+                  {displayStatus === 'cancelled'
+                    ? '✕ Đã hủy'
+                    : displayStatus === 'past'
+                      ? 'Đã qua giờ'
+                      : 'Chờ Check-in'}
                 </Text>
               </View>
             </View>
@@ -130,7 +148,7 @@ export const QRModal: React.FC<QRModalProps> = ({
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-            {!isCheckedIn && onCheckIn && (
+            {displayStatus === 'upcoming' && onCheckIn && (
               <TouchableOpacity
                 style={styles.checkInButton}
                 activeOpacity={0.8}

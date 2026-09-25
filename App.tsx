@@ -24,6 +24,8 @@ LogBox.ignoreLogs([
 ]);
 
 export default function App() {
+  const currentUser = useBookingStore(state => state.currentUser);
+
   useEffect(() => {
     // Khởi tạo notification handler và Android Channel an toàn trong try/catch (chỉ gọi 1 lần duy nhất)
     setupNotificationHandler();
@@ -32,7 +34,7 @@ export default function App() {
     });
 
     // Lắng nghe thay đổi trạng thái đăng nhập Firebase Authentication
-    const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async firebaseUser => {
       try {
         if (firebaseUser) {
           let userProfileData: any = null;
@@ -75,9 +77,22 @@ export default function App() {
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeAuth();
     };
   }, []);
+
+  // Lắng nghe dữ liệu Rooms & Bookings từ Firestore theo thời gian thực khi có người dùng đăng nhập
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const unsubscribeRooms = useBookingStore.getState().subscribeToRooms();
+    const unsubscribeBookings = useBookingStore.getState().subscribeToBookings();
+
+    return () => {
+      unsubscribeRooms();
+      unsubscribeBookings();
+    };
+  }, [currentUser]);
 
   return (
     <SafeAreaProvider>

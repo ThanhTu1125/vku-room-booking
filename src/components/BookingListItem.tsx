@@ -4,6 +4,7 @@ import { Booking, Room } from '../types';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
 import { formatDisplayDate } from '../utils/dateHelpers';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 
 export interface BookingListItemProps {
   booking: Booking;
@@ -19,32 +20,30 @@ const BookingListItemComponent: React.FC<BookingListItemProps> = ({
   onCancel,
 }) => {
   const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
-  const timeSlotLabel = slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId;
-  const isUpcoming = booking.status === 'upcoming';
-  const isCheckedIn = booking.status === 'checked-in';
-  const isCancelled = booking.status === 'cancelled';
-  const isCompleted = booking.status === 'completed';
+  const timeSlotLabel =
+    booking.timeSlotLabel ||
+    (slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId);
+  const displayStatus = getBookingDisplayStatus(booking);
 
-  // Badge trạng thái tương ứng
-  let statusText = 'Chờ Check-in';
+  // Badge trạng thái tính toán động
+  let statusText = 'Sắp tới';
   let statusColor: string = COLORS.primary;
   let statusBg: string = COLORS.primarySoft;
 
-  if (isCheckedIn) {
-    statusText = '✓ Đã Check-in';
-    statusColor = COLORS.available;
-    statusBg = COLORS.availableSoft;
-  } else if (isCompleted) {
-    statusText = 'Hoàn thành';
+  if (displayStatus === 'past') {
+    statusText = 'Đã qua';
     statusColor = COLORS.textMuted;
     statusBg = COLORS.divider;
-  } else if (isCancelled) {
+  } else if (displayStatus === 'cancelled') {
     statusText = 'Đã hủy';
     statusColor = COLORS.occupied;
     statusBg = COLORS.occupiedSoft;
   }
 
   const shortCode = (booking.id || '').slice(0, 8).toUpperCase();
+  const roomNameDisplay = room?.name || booking.roomName || 'Phòng học VKU';
+  const buildingDisplay = room?.building || booking.building || 'VKU';
+  const floorDisplay = room?.floor || booking.floor || 1;
 
   return (
     <View style={styles.card}>
@@ -52,10 +51,10 @@ const BookingListItemComponent: React.FC<BookingListItemProps> = ({
       <View style={styles.headerRow}>
         <View style={styles.roomInfoWrap}>
           <Text style={styles.roomName} numberOfLines={1}>
-            {room?.name || 'Phòng học VKU'}
+            {roomNameDisplay}
           </Text>
           <Text style={styles.subLocation}>
-            Tòa {room?.building || 'VKU'} • Tầng {room?.floor || 1} • Mã {shortCode}
+            Tòa {buildingDisplay} • Tầng {floorDisplay} • Mã {shortCode}
           </Text>
         </View>
 
@@ -92,8 +91,8 @@ const BookingListItemComponent: React.FC<BookingListItemProps> = ({
           <Text style={styles.qrPassButtonText}>📱 Xem mã QR Pass</Text>
         </TouchableOpacity>
 
-        {/* Nút Hủy đặt phòng (chỉ áp dụng cho ca sắp tới) */}
-        {isUpcoming && onCancel && (
+        {/* Nút Hủy đặt phòng (chỉ áp dụng cho ca SẮP TỚI, không cho hủy ca đã qua) */}
+        {displayStatus === 'upcoming' && onCancel && (
           <TouchableOpacity
             style={styles.cancelButton}
             activeOpacity={0.8}
@@ -114,6 +113,7 @@ export const BookingListItem = React.memo(BookingListItemComponent, (prev, next)
     prev.booking.status === next.booking.status &&
     prev.booking.date === next.booking.date &&
     prev.booking.timeSlotId === next.booking.timeSlotId &&
+    getBookingDisplayStatus(prev.booking) === getBookingDisplayStatus(next.booking) &&
     prev.room?.id === next.room?.id
   );
 });

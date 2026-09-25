@@ -14,6 +14,7 @@ import { Booking, Room } from '../types';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
 import { formatDisplayDate } from '../utils/dateHelpers';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 import { useBookingStore } from '../store/useBookingStore';
 
 export interface QRBookingModalProps {
@@ -35,28 +36,25 @@ export const QRBookingModal: React.FC<QRBookingModalProps> = ({
   if (!booking) return null;
 
   const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
-  const timeSlotLabel = slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId;
+  const timeSlotLabel =
+    booking.timeSlotLabel ||
+    (slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId);
   const shortBookingId = (booking.id || '').slice(0, 8).toUpperCase();
   const dateFormatted = formatDisplayDate(booking.date);
+  const displayStatus = getBookingDisplayStatus(booking);
 
-  // Cấu hình nhãn và màu sắc theo trạng thái booking
+  // Cấu hình nhãn và màu sắc theo trạng thái booking động
   const getStatusBadgeConfig = () => {
-    switch (booking.status) {
-      case 'checked-in':
-        return {
-          text: '✓ ĐÃ CHECK-IN',
-          bgColor: COLORS.availableSoft,
-          textColor: COLORS.available,
-        };
+    switch (displayStatus) {
       case 'cancelled':
         return {
           text: '✕ ĐÃ HỦY LỊCH',
           bgColor: COLORS.occupiedSoft,
           textColor: COLORS.occupied,
         };
-      case 'completed':
+      case 'past':
         return {
-          text: 'HOÀN THÀNH',
+          text: 'ĐÃ QUA GIỜ',
           bgColor: COLORS.divider,
           textColor: COLORS.textMuted,
         };
@@ -111,12 +109,13 @@ export const QRBookingModal: React.FC<QRBookingModalProps> = ({
             {/* Phần thông tin phòng học */}
             <View style={styles.roomSection}>
               <Text style={styles.roomName} numberOfLines={1}>
-                {room?.name || 'Phòng học VKU'}
+                {room?.name || booking.roomName || 'Phòng học VKU'}
               </Text>
               <View style={styles.metaRow}>
                 <View style={styles.locationBadge}>
                   <Text style={styles.locationBadgeText}>
-                    Tòa {room?.building || 'A'} • Tầng {room?.floor || 1}
+                    Tòa {room?.building || booking.building || 'A'} • Tầng{' '}
+                    {room?.floor || booking.floor || 1}
                   </Text>
                 </View>
                 <View

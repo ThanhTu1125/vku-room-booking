@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { BookingListItem } from '../components/BookingListItem';
 import { QRBookingModal } from '../components/QRBookingModal';
 import { TIME_SLOTS } from '../constants/timeSlots';
 import { COLORS } from '../constants/colors';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 
 type TabFilter = 'ALL' | 'UPCOMING' | 'HISTORY';
 
@@ -39,6 +40,15 @@ export const MyBookingsScreen: React.FC = () => {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
 
+  // Bộ đếm thời gian tự động re-render mỗi 30 giây để cập nhật trạng thái động khi qua giờ ca học
+  const [currentTick, setCurrentTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTick(prev => prev + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Tra cứu phòng nhanh bằng Map
   const roomMap = useMemo(() => {
     return new Map<string, Room>(rooms.map(r => [r.id, r]));
@@ -49,27 +59,30 @@ export const MyBookingsScreen: React.FC = () => {
     return getUserBookings();
   }, [bookings, getUserBookings]);
 
-  // Nhóm 1: "Sắp tới" (upcoming hoặc checked-in), sắp xếp gần nhất trước (date tăng dần)
+  // Nhóm 1: "Sắp tới" — chỉ những booking có trạng thái hiển thị động là 'upcoming'
   const upcomingBookings = useMemo(() => {
     return userBookings
-      .filter(b => b.status === 'upcoming' || b.status === 'checked-in')
+      .filter(b => getBookingDisplayStatus(b) === 'upcoming')
       .sort((a, b) => {
         const dateComp = a.date.localeCompare(b.date);
         if (dateComp !== 0) return dateComp;
         return a.timeSlotId.localeCompare(b.timeSlotId);
       });
-  }, [userBookings]);
+  }, [userBookings, currentTick]);
 
-  // Nhóm 2: "Lịch sử" (completed hoặc cancelled), sắp xếp mới nhất trước (date giảm dần)
+  // Nhóm 2: "Lịch sử" — bao gồm cả 'past' (đã qua giờ) VÀ 'cancelled' (đã hủy)
   const historyBookings = useMemo(() => {
     return userBookings
-      .filter(b => b.status === 'completed' || b.status === 'cancelled')
+      .filter(b => {
+        const displayStatus = getBookingDisplayStatus(b);
+        return displayStatus === 'past' || displayStatus === 'cancelled';
+      })
       .sort((a, b) => {
         const dateComp = b.date.localeCompare(a.date);
         if (dateComp !== 0) return dateComp;
         return b.timeSlotId.localeCompare(a.timeSlotId);
       });
-  }, [userBookings]);
+  }, [userBookings, currentTick]);
 
   // Chia danh sách theo SectionList dựa vào TabFilter
   const sections: BookingSection[] = useMemo(() => {
@@ -109,11 +122,14 @@ export const MyBookingsScreen: React.FC = () => {
     (booking: Booking) => {
       const room = roomMap.get(booking.roomId);
       const slot = TIME_SLOTS.find(s => s.id === booking.timeSlotId);
-      const slotLabel = slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId;
+      const slotLabel =
+        booking.timeSlotLabel ||
+        (slot ? `${slot.startTime} - ${slot.endTime}` : booking.timeSlotId);
+      const roomName = room?.name || booking.roomName || 'phòng';
 
       Alert.alert(
         'Xác nhận hủy đặt phòng',
-        `Bạn có chắc muốn hủy lịch đặt ${room?.name || 'phòng'} (${slotLabel}, ngày ${booking.date})? Khung giờ này sẽ được giải phóng cho sinh viên khác.`,
+        `Bạn có chắc muốn hủy lịch đặt ${roomName} (${slotLabel}, ngày ${booking.date})? Khung giờ này sẽ được giải phóng cho sinh viên khác.`,
         [
           { text: 'Không, giữ lại', style: 'cancel' },
           {

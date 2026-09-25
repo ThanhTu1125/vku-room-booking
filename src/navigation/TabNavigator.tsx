@@ -9,6 +9,7 @@ import { MyBookingsScreen } from '../screens/MyBookingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { useBookingStore } from '../store/useBookingStore';
 import { COLORS } from '../constants/colors';
+import { getBookingDisplayStatus } from '../utils/bookingStatusHelper';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -20,7 +21,9 @@ export const TabNavigator: React.FC = () => {
   // Đếm số lượng booking sắp tới của riêng người dùng hiện tại
   const activeBookingsCount = currentUser
     ? bookings.filter(
-        b => b.userId === (currentUser.uid || currentUser.id) && b.status === 'upcoming'
+        b =>
+          b.userId === (currentUser.uid || currentUser.id) &&
+          getBookingDisplayStatus(b) === 'upcoming'
       ).length
     : 0;
 
