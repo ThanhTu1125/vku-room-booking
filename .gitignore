@@ -32,3 +32,5 @@ Thumbs.db
 # TypeScript cache
 *.tsbuildinfo
 
+# Temporary reports & text logs
+*.txt

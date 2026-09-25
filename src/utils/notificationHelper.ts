@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Booking, Room, TimeSlot } from '../types';
 import { get15MinutesBeforeSlot } from './dateHelpers';
 
@@ -7,14 +8,13 @@ import { get15MinutesBeforeSlot } from './dateHelpers';
  * LƯU Ý KỸ THUẬT VỀ EXPO GO & EXPO MANAGED WORKFLOW (SDK 53+ / SDK 57):
  * ----------------------------------------------------------------------------
  * 1. Từ Expo SDK 51+, Expo Go trên Android đã gỡ bỏ hoàn toàn module Push (FCM),
- *    bao gồm cả 'ExpoTopicSubscriptionModule'.
+ *    bao gồm cả 'ExpoTopicSubscriptionModule' và 'NotificationsChannelsProvider'.
  * 2. Để tránh lỗi Red Screen "[runtime not ready]: Error: Cannot find native module
  *    'ExpoTopicSubscriptionModule'" khi chạy trên Expo Go / Expo Snack, module này
  *    SỬ DỤNG DYNAMIC REQUIRE TRONG TRY/CATCH thay vì static import ở cấp cao nhất.
- * 3. GRACEFUL DEGRADATION: Nếu native module không tồn tại trong môi trường hiện tại,
- *    các hàm sẽ bắt lỗi an toàn (catch), ghi log thông tin (console.log) và vô hiệu
- *    hóa riêng phần thông báo nhắc nhở — ĐẢM BẢO toàn bộ ứng dụng (đặt phòng, QR,
- *    danh sách vé) VẪN HOẠT ĐỘNG HOÀN TOÀN BÌNH THƯỜNG, KHÔNG BAO GIỜ CRASH APP.
+ * 3. GRACEFUL DEGRADATION: Nếu native module không tồn tại trong môi trường hiện tại
+ *    hoặc đang chạy trên Expo Go Client, các hàm native channel sẽ được bypass an toàn,
+ *    bắt lỗi bằng try/catch — ĐẢM BẢO app không bao giờ bị văng do NullPointerException.
  * ============================================================================
  */
 
@@ -24,6 +24,22 @@ let NotificationsModule: typeof import('expo-notifications') | null = null;
 let hasAttemptedLoad = false;
 let isChannelSetup = false;
 let isSettingUpChannel = false;
+
+/**
+ * Kiểm tra xem ứng dụng có đang chạy trên môi trường Expo Go client hay không.
+ * Trên Expo Go Android (từ SDK 51/53/57), các native module liên quan đến NotificationsChannelsProvider
+ * đã bị lược bỏ, dẫn đến crash NullPointerException nếu gọi channel API.
+ */
+export const isRunningInExpoGo = (): boolean => {
+  try {
+    return (
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      (Constants as any)?.appOwnership === 'expo'
+    );
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Nạp module expo-notifications an toàn bằng dynamic require trong try/catch
@@ -83,6 +99,16 @@ export const setupNotificationHandler = (): void => {
 export const setupNotificationChannel = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
   if (isChannelSetup || isSettingUpChannel) return;
+
+  // 1. Bypass hoàn toàn khi chạy trên Expo Go Android để triệt tiêu lỗi NullPointerException:
+  // "null cannot be cast to non-null type NotificationsChannelsProvider"
+  if (isRunningInExpoGo()) {
+    console.log(
+      '[NotificationHelper] Phát hiện môi trường Expo Go Android: Tự động bypass setupNotificationChannel (tránh NullPointerException do thiếu NotificationsChannelsProvider).'
+    );
+    isChannelSetup = true;
+    return;
+  }
 
   isSettingUpChannel = true;
   try {
@@ -149,7 +175,9 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     }
 
     if (finalStatus === 'granted') {
-      await setupNotificationChannel();
+      if (!isRunningInExpoGo()) {
+        await setupNotificationChannel();
+      }
       return true;
     }
 
@@ -225,7 +253,9 @@ export const scheduleCheckInReminder = async (
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes?.DATE ?? 'date',
         date: triggerDate,
-        channelId: Platform.OS === 'android' ? ANDROID_CHANNEL_ID : undefined,
+        ...(Platform.OS === 'android' && !isRunningInExpoGo()
+          ? { channelId: ANDROID_CHANNEL_ID }
+          : {}),
       } as any,
     });
 

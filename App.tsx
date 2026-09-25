@@ -20,6 +20,8 @@ LogBox.ignoreLogs([
   'expo-notifications functionality is not fully supported in Expo Go',
   'Bỏ qua setupNotificationChannel',
   'NotificationsChannelsProvider',
+  'setNotificationChannelAsync',
+  'setLayoutAnimationEnabledExperimental',
   'setLayoutAnimationEnabledExperimental is currently a no-op in the New Architecture',
 ]);
 

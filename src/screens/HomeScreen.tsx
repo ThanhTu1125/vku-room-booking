@@ -31,13 +31,20 @@ export const HomeScreen: React.FC = () => {
   const getFilteredRooms = useBookingStore(state => state.getFilteredRooms);
   const resetFilters = useBookingStore(state => state.resetFilters);
 
-  // Kích hoạt LayoutAnimation trên Android (chỉ cần thiết cho Old Architecture)
+  // Kích hoạt LayoutAnimation trên Android (chỉ cần thiết cho Old Architecture, bypass trên React Native 0.86+ New Architecture)
   useEffect(() => {
+    // Trên React Native 0.86+ (New Architecture / Bridgeless), LayoutAnimation được hỗ trợ tự động trên Android.
+    // Lệnh UIManager.setLayoutAnimationEnabledExperimental là no-op và sinh warning không mong muốn.
+    // Do đó, kiểm tra và bypass hoàn toàn trên kiến trúc mới.
+    const isNewArchitecture =
+      // @ts-ignore
+      Boolean(global._IS_FABRIC || (global as any)?.RN$Bridgeless) ||
+      Boolean((Platform.constants as any)?.reactNativeVersion?.minor >= 74);
+
     if (
       Platform.OS === 'android' &&
-      UIManager.setLayoutAnimationEnabledExperimental &&
-      // @ts-ignore
-      !global._IS_FABRIC
+      !isNewArchitecture &&
+      typeof UIManager.setLayoutAnimationEnabledExperimental === 'function'
     ) {
       try {
         UIManager.setLayoutAnimationEnabledExperimental(true);

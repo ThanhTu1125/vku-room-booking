@@ -1,96 +1,50 @@
-# VKU Study Room Booking (StudyRoomBooking) 🎓📱
-
-> Ứng dụng di động quản lý & đặt phòng học/phòng lab thời gian thực dành cho sinh viên Trường Đại học Công nghệ Thông tin & Truyền thông Việt - Hàn (VKU).
->
-> 🔗 **GitHub Repository**: [https://github.com/ThanhTu1125/vku-room-booking](https://github.com/ThanhTu1125/vku-room-booking)
-
----
-
-## 🌟 Tính năng chính
-
-- 🏛️ **Khám phá & Tìm kiếm phòng học**: Danh mục các phòng tự học, phòng họp nhóm, Lab AI, Lab IoT, Lab Mac Studio tại các khu giảng đường VKU (Khu K, Khu V, Thư viện, Tòa Đa Năng).
-- 🔍 **Bộ lọc đa tiêu chí linh hoạt**: Lọc theo ngày, tòa nhà, sức chứa, loại phòng và trang thiết bị (máy chiếu, điều hòa, dàn PC i7...).
-- ⏰ **Chọn ca học & Chống trùng lịch**: 6 ca học tiêu chuẩn mỗi ngày; thuật toán tự động nhận diện và khóa các ca đã có người đặt hoặc đã quá giờ.
-- 📱 **Vé Check-in mã QR**: Tự động sinh mã QR Pass bằng SVG chuẩn xác để quét mở cửa phòng học.
-- ⚡ **Quản lý State toàn cục bằng Zustand**: Kết hợp lưu trữ offline qua `@react-native-async-storage/async-storage`.
-- 🔔 **Local Notifications thông minh**: Lập lịch thông báo nhắc nhở sinh viên trước giờ học 15 phút, tương thích 100% Expo Go và Expo Snack.
+# MINI-PROJECT SHORT TECHNICAL REPORT
+**Course:** Cross-Platform Mobile App Development (VKU)  
+**Mini-Project Title:** Mini-Project 2 - Smart Study Room Booking System (VKU Room Booking)  
+**Team / Student Name:** Nguyễn Thanh Tú - 23IT296  
+**Submission Date:** 25/09/2026  
 
 ---
 
-## 🛠️ Công nghệ sử dụng
-
-| Thư viện / Công nghệ | Vai trò & Lý do lựa chọn |
-| :--- | :--- |
-| **Expo SDK (Managed Workflow)** | Hỗ trợ phát triển nhanh, tương thích hoàn toàn Expo Go và triển khai trực tiếp lên Expo Snack mà không cần cấu hình Native Build phức tạp. |
-| **TypeScript** | Định kiểu chặt chẽ (strict typing), kiểm soát lỗi tại thời điểm compile, tăng độ tin cậy và tự tin tái cấu trúc. |
-| **Zustand** | State management siêu nhẹ (< 2KB), API tối giản dạng hook, không boilerplate, dễ persist với AsyncStorage. |
-| **React Navigation v7** | Hệ thống điều hướng tiêu chuẩn công nghiệp (Native Stack + Bottom Tabs) tối ưu hóa trải nghiệm native mượt mà. |
-| **react-native-screens & safe-area-context** | Tối ưu hóa hiệu năng render màn hình và xử lý tai thỏ / notch trên mọi thiết bị iOS & Android. |
-| **@react-native-async-storage/async-storage** | Lưu trữ dữ liệu lịch đặt phòng cục bộ trên thiết bị, duy trì trạng thái khi khởi động lại app. |
-| **expo-notifications** | Quản lý kênh thông báo Android (Channel) và lập lịch Local Notification nhắc trước 15 phút. |
-| **react-native-qrcode-svg + react-native-svg** | Tạo mã QR check-in phòng học bằng đồ họa vector SVG sắc nét, không bị vỡ hình. |
-| **date-fns** | Xử lý định dạng thời gian, tính toán ca học theo chuẩn modular, tree-shaking tối ưu dung lượng bundle. |
+## 1. GENERAL INFORMATION & DELIVERABLE LINKS
+* **Team Members:**
+  1. Nguyễn Thanh Tú — Student ID: 23IT296
+* **🔗 Live Demo URL:** https://drive.google.com/drive/folders/1Y8mr4evGq1TNf-9_wHbBm2Hv0WBvUsJh?usp=sharing
+* **💻 GitHub Repository:** https://github.com/ThanhTu1125/vku-room-booking.git
 
 ---
 
-## 🚀 Hướng dẫn cài đặt & Khởi chạy
-
-### 1. Clone project:
-```bash
-git clone https://github.com/ThanhTu1125/vku-room-booking.git
-cd vku-room-booking
-```
-
-### 2. Cài đặt thư viện phụ thuộc:
-```bash
-npm install
-```
-
-### 3. Khởi chạy Metro Bundler:
-```bash
-npx expo start
-```
-- Quét mã QR bằng ứng dụng **Expo Go** trên Android/iOS để trải nghiệm.
-- Nhấn `a` để mở trên Android Emulator.
-- Nhấn `w` để mở trên Web browser.
-
-### 4. Kiểm tra mã nguồn:
-```bash
-# Kiểm tra định kiểu TypeScript:
-npm run typecheck
-
-# Định dạng code với Prettier:
-npm run format
-
-# Kiểm tra linter với ESLint:
-npm run lint
-```
+## 2. FEATURE IMPLEMENTATION CHECKLIST
+| # | Required Feature | Status | Implementation Details & Acceptance Level |
+|:---:|---|:---:|---|
+| 1 | **Authentication & Session** | ✅ Complete | Integrated Firebase Auth with `AsyncStorage` for persistent sessions. Implemented secure auto-login lifecycle. |
+| 2 | **Real-time Discovery & Filtering** | ✅ Complete | Utilized Firestore `onSnapshot` combined with `Zustand` for reactive, high-performance multi-criteria filtering (Building, Capacity, Equipment). |
+| 3 | **Conflict-Free Booking (ACID)** | ✅ Complete | Implemented Firestore `runTransaction` to lock time slots atomically, entirely eliminating Double-Booking anomalies. |
+| 4 | **Dynamic QR Ticketing** | ✅ Complete | Generated on-the-fly QR codes (`react-native-qrcode-svg`) encapsulating booking metadata for physical check-ins. |
+| 5 | **Local Push Notifications** | ✅ Complete | Configured `expo-notifications` for client-side scheduling, triggering reminders 15 minutes prior to the booked session. |
 
 ---
 
-## 📁 Cấu trúc thư mục Modular
+## 3. TECHNICAL ARCHITECTURE & PROJECT STRUCTURE
+* **Framework & Environment:** Built on React Native 0.86.3 and Expo SDK 57 (Managed Workflow) utilizing the New Architecture (Fabric & Bridgeless Mode).
+* **State Management:** Adopted `Zustand` (v5) for global state management, centralizing Firebase realtime listeners to prevent memory leaks and redundant re-renders common in standard Context API implementations.
+* **Database Architecture:** Employed Firebase Cloud Firestore (NoSQL). Designed a denormalized `bookings` collection optimized for read-heavy operations, governed by strict declarative Firebase Security Rules (`firestore.rules`).
+* **Directory Pattern:** Layered/Feature-based architecture segregating UI components (`src/components`), custom hooks (`src/hooks`), state stores (`src/store`), and backend services (`src/services`).
 
-Chi tiết xem tại tài liệu nội bộ [/src/README.md](./src/README.md).
+---
 
-```
-├── App.tsx                     # Root application component
-├── index.ts                    # Expo entry point
-├── app.json                    # Cấu hình Expo & Notifications
-├── package.json                # Dependencies & scripts
-├── tsconfig.json               # Cấu hình TypeScript
-├── .eslintrc.js                # Cấu hình ESLint
-├── .prettierrc                 # Cấu hình Prettier
-├── .gitignore                  # Git ignore standard
-└── src/
-    ├── README.md               # Tài liệu nội bộ kiến trúc modular
-    ├── components/             # Reusable UI components
-    ├── constants/              # Hằng số, màu sắc, ca học, tòa nhà
-    ├── data/                   # Mock data phòng học & lịch đặt
-    ├── hooks/                  # Custom React hooks
-    ├── navigation/             # Bottom Tabs & Native Stack
-    ├── screens/                # Các màn hình chính
-    ├── store/                  # Zustand global stores
-    ├── types/                  # TypeScript interfaces & types
-    └── utils/                  # Thuật toán chống trùng, date, id, notifications
-```
+## 4. EMPIRICAL EVIDENCE & SCREENSHOTS
+*(Please replace placeholders with actual relative paths to your screenshots in the `assets/` folder)*
+* `[Screenshot 1]` - Auth & Discovery Dashboard showing Real-time Availability.
+* `[Screenshot 2]` - Time-slot Grid illustrating Transactional Locks (Reserved vs. Available).
+* `[Screenshot 3]` - My Bookings & Generated QR Code Modal.
 
+---
+
+## 5. TECHNICAL CHALLENGES & RESOLUTIONS
+* **Challenge 1: Native Module Exceptions in Expo Go Environment:**
+  * *Bottleneck:* The integration of `expo-notifications` triggered fatal `NullPointerException` errors on Android Expo Go due to the deprecation of `NotificationsChannelsProvider` in recent SDKs.
+  * *Resolution:* Engineered an environment-detection utility utilizing `expo-constants` to dynamically bypass native channel configurations (`setNotificationChannelAsync`) when executing inside the Expo Go client, ensuring uninterrupted runtime stability without compromising bare-workflow functionality.
+* **Challenge 2: Concurrency in Slot Reservation (Double Booking):**
+  * *Bottleneck:* High-frequency simultaneous booking attempts led to race conditions where two clients could reserve the exact same room and timeslot.
+  * *Resolution:* Shifted from standard Firestore `setDoc` operations to atomic `runTransaction` blocks utilizing a dedicated `slot_locks` collection. This enforces strict ACID properties, rolling back subsequent concurrent requests with appropriate user-facing exception handling.
